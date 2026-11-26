@@ -11,6 +11,7 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -54,6 +55,15 @@ class MainActivity : AppCompatActivity() {
 
     private var isMultiSelectMode: Boolean = false
     private val selectedKeys = LinkedHashSet<String>()
+
+    private val backCallback = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() {
+            when {
+                isMultiSelectMode -> exitMultiSelect()
+                searchQuery.isNotEmpty() -> binding.etSearch.setText("")
+            }
+        }
+    }
 
     private val pickPdfsLauncher = registerForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
@@ -102,6 +112,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         applyEdgeToEdgeInsets()
+        onBackPressedDispatcher.addCallback(this, backCallback)
         setupRecyclerViews()
         setupControls()
         updatePermissionBanner()
@@ -351,6 +362,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateFloatingControls() {
+        backCallback.isEnabled = isMultiSelectMode || searchQuery.isNotEmpty()
         if (isMultiSelectMode) {
             binding.btnSelectMode.text = getString(R.string.done_label)
             binding.btnSelectMode.setBackgroundResource(R.drawable.bg_category_tag)
