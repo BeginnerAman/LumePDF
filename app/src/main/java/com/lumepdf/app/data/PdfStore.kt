@@ -21,7 +21,7 @@ class PdfStore(context: Context) {
     fun getCategories(): List<String> {
         val raw = prefs.getString(KEY_CATEGORIES, null)
         if (raw.isNullOrBlank()) {
-            val defaults = listOf("Study", "Work", "Bills", "Books")
+            val defaults = listOf("Study", "Work", "Notes", "Books")
             saveCategories(defaults)
             return defaults
         }
@@ -33,7 +33,7 @@ class PdfStore(context: Context) {
                     if (value.isNotEmpty()) add(value)
                 }
             }
-        }.getOrElse { listOf("Study", "Work", "Bills", "Books") }
+        }.getOrElse { listOf("Study", "Work", "Notes", "Books") }
     }
 
     fun addCategory(name: String): Boolean {
@@ -255,6 +255,18 @@ class PdfStore(context: Context) {
         prefs.edit().putBoolean(KEY_KEEP_SCREEN_ON, enabled).apply()
     }
 
+    fun getAppThemeId(): String = prefs.getString(KEY_APP_THEME, "lavender") ?: "lavender"
+
+    fun setAppThemeId(themeId: String) {
+        prefs.edit().putString(KEY_APP_THEME, themeId).apply()
+    }
+
+    fun hasShownWelcome(): Boolean = prefs.getBoolean(KEY_WELCOME_SHOWN, false)
+
+    fun setWelcomeShown() {
+        prefs.edit().putBoolean(KEY_WELCOME_SHOWN, true).apply()
+    }
+
     fun getLastScanHadFullAccess(): Boolean = prefs.getBoolean(KEY_LAST_FULL_ACCESS, false)
 
     fun setLastScanHadFullAccess(granted: Boolean) {
@@ -327,5 +339,7 @@ class PdfStore(context: Context) {
         private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
         private const val KEY_CACHED_PDFS = "cached_pdfs"
         private const val KEY_LAST_FULL_ACCESS = "last_full_access"
+        private const val KEY_APP_THEME = "app_theme"
+        private const val KEY_WELCOME_SHOWN = "welcome_shown"
     }
 }

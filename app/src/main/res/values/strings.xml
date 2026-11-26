@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">LumePDF</string>
+    <string name="personal_badge">For Khushi Ji</string>
+    <string name="welcome_title">Welcome, Khushi Ji</string>
+    <string name="welcome_subtitle">Your personal LumePDF space</string>
+    <string name="welcome_body">Crafted specially for Khushi Ji — ultra-lightweight, completely ad-free, and silky-smooth for calm, effortless reading every day.</string>
     <string name="subtitle_scanning">Scanning PDFs…</string>
     <string name="search_hint">Search PDFs…</string>
     <string name="add_pdf">Add PDF</string>

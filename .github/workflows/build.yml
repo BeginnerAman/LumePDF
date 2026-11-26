@@ -1,8 +1,8 @@
-name: Build LumePDF APK
+name: Build LumePDF APK (ks)
 
 on:
   push:
-    branches: [ main ]
+    branches: [ ks ]
   workflow_dispatch:
 
 permissions:
@@ -22,29 +22,6 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Cache signing keystore fallback
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.android/debug.keystore
-            ~/.config/.android/debug.keystore
-          key: lumepdf-debug-keystore-v2
-
-      - name: Decode release keystore if configured
-        env:
-          KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
-          STORE_PASS: ${{ secrets.RELEASE_STORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          KEY_PASS: ${{ secrets.RELEASE_KEY_PASSWORD }}
-        run: |
-          if [ -n "$KEYSTORE_B64" ]; then
-            echo "$KEYSTORE_B64" | base64 -d > release.keystore
-            echo "RELEASE_STORE_FILE=$GITHUB_WORKSPACE/release.keystore" >> "$GITHUB_ENV"
-            echo "RELEASE_STORE_PASSWORD=$STORE_PASS" >> "$GITHUB_ENV"
-            echo "RELEASE_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
-            echo "RELEASE_KEY_PASSWORD=$KEY_PASS" >> "$GITHUB_ENV"
-          fi
-
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -56,31 +33,32 @@ jobs:
       - name: Prepare APK outputs
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/release/app-release.apk dist/LumePDF-release.apk
+          cp app/build/outputs/apk/release/app-release.apk dist/LumePDF.apk
           cp app/build/outputs/apk/debug/app-debug.apk dist/LumePDF-debug.apk
           ls -lh dist/
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LumePDF-release-apk
-          path: dist/LumePDF-release.apk
+          name: LumePDF-ks-apk
+          path: dist/LumePDF.apk
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LumePDF-debug-apk
+          name: LumePDF-ks-debug-apk
           path: dist/LumePDF-debug.apk
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: LumePDF v1.0.${{ github.run_number }}
+          tag_name: ks-v1.0.${{ github.run_number }}
+          name: LumePDF (Khushi Ji) ks-v1.0.${{ github.run_number }}
+          make_latest: false
           body: |
-            Automated cloud APK build for **LumePDF**.
-            - `LumePDF-release.apk` — Optimized, ultra-lightweight R8 release build (recommended)
+            Automated cloud APK build for **LumePDF** (`ks` branch — personalized for Khushi Ji).
+            - `LumePDF.apk` — Optimized, ultra-lightweight R8 release build (recommended)
             - `LumePDF-debug.apk` — Debug build
           files: |
-            dist/LumePDF-release.apk
+            dist/LumePDF.apk
             dist/LumePDF-debug.apk

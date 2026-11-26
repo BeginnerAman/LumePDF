@@ -3,6 +3,7 @@ package com.lumepdf.app
 import android.Manifest
 import android.animation.ObjectAnimator
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
@@ -17,7 +18,6 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -37,6 +37,7 @@ import com.lumepdf.app.model.SortOrder
 import com.lumepdf.app.ui.CategoryChipAdapter
 import com.lumepdf.app.ui.GlassDialogs
 import com.lumepdf.app.ui.PdfListAdapter
+import com.lumepdf.app.ui.ThemeManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -62,6 +63,8 @@ class MainActivity : AppCompatActivity() {
     private var scanJob: Job? = null
     private var isUserScanning: Boolean = false
     private var refreshAnimator: ObjectAnimator? = null
+    private var currentTheme: ThemeManager.AppTheme = ThemeManager.AppTheme.LAVENDER
+    private lateinit var currentPalette: ThemeManager.ThemePalette
 
     private val backCallback = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() {
@@ -110,6 +113,8 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         store = PdfStore(this)
+        currentTheme = ThemeManager.AppTheme.fromId(store.getAppThemeId())
+        currentPalette = ThemeManager.getPalette(this, currentTheme)
         sortOrder = store.getSortOrder()
         dateGrouped = store.isDateGrouped()
 
@@ -122,10 +127,18 @@ class MainActivity : AppCompatActivity() {
         onBackPressedDispatcher.addCallback(this, backCallback)
         setupRecyclerViews()
         setupControls()
+        applyTheme(animate = false)
         updatePermissionBanner()
-        updateSortAndDatePills()
-        updateFloatingControls()
         loadInitialLibrary()
+
+        if (!store.hasShownWelcome()) {
+            store.setWelcomeShown()
+            binding.rootContainer.postDelayed({
+                if (!isFinishing && !isDestroyed) {
+                    openWelcomeNote()
+                }
+            }, 220L)
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -165,7 +178,7 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     CategoryChip.AddNew -> {
-                        GlassDialogs.showNewCategoryDialog(this) { newName ->
+                        GlassDialogs.showNewCategoryDialog(this, currentPalette) { newName ->
                             if (store.addCategory(newName)) {
                                 selectedCategory = newName
                                 exitMultiSelect()
@@ -186,7 +199,8 @@ class MainActivity : AppCompatActivity() {
                     GlassDialogs.showDeleteConfirmDialog(
                         context = this,
                         title = "Delete Category?",
-                        body = "Remove “$catName”? PDFs inside it will move to Other."
+                        body = "Remove “$catName”? PDFs inside it will move to Other.",
+                        palette = currentPalette
                     ) {
                         store.deleteCategory(catName)
                         if (selectedCategory.equals(catName, ignoreCase = true)) {
@@ -239,6 +253,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupControls() {
+        binding.btnTheme.setOnClickListener {
+            ThemeManager.performThemeSwitchHaptic(it)
+            openThemeSwitcher()
+        }
+        binding.tvPersonalBadge.setOnClickListener {
+            ThemeManager.performThemeSwitchHaptic(it)
+            openWelcomeNote()
+        }
         binding.btnRefresh.setOnClickListener {
             scanLibrary(fullWalk = true, silent = false, userInitiated = true)
         }
@@ -286,7 +308,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnSort.setOnClickListener {
-            GlassDialogs.showSortDialog(this, sortOrder) { chosen ->
+            GlassDialogs.showSortDialog(this, sortOrder, currentPalette) { chosen ->
                 sortOrder = chosen
                 store.setSortOrder(chosen)
                 updateSortAndDatePills()
@@ -340,7 +362,8 @@ class MainActivity : AppCompatActivity() {
                 context = this,
                 targetCategory = targetCategory,
                 allPdfs = allPdfs,
-                categoryMap = store.getCategoryMap()
+                categoryMap = store.getCategoryMap(),
+                palette = currentPalette
             ) { chosenKeys ->
                 val currentMap = store.getCategoryMap()
                 allPdfs.forEach { pdf ->
@@ -384,8 +407,8 @@ class MainActivity : AppCompatActivity() {
         backCallback.isEnabled = isMultiSelectMode || searchQuery.isNotEmpty()
         if (isMultiSelectMode) {
             binding.btnSelectMode.text = getString(R.string.done_label)
-            binding.btnSelectMode.setBackgroundResource(R.drawable.bg_category_tag)
-            binding.btnSelectMode.setTextColor(ContextCompat.getColor(this, R.color.accent_blue))
+            binding.btnSelectMode.background = ThemeManager.categoryTagDrawable(this, currentPalette)
+            binding.btnSelectMode.setTextColor(currentPalette.accent)
             binding.fabAddPdf.visibility = View.GONE
             binding.multiSelectBar.visibility = View.VISIBLE
             binding.tvMultiCount.text = "${selectedKeys.size} selected"
@@ -394,8 +417,8 @@ class MainActivity : AppCompatActivity() {
             binding.btnMultiSelectAll.text = if (allSelected) "None" else "All"
         } else {
             binding.btnSelectMode.text = getString(R.string.select_label)
-            binding.btnSelectMode.setBackgroundResource(R.drawable.bg_glass_pill)
-            binding.btnSelectMode.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
+            binding.btnSelectMode.background = ThemeManager.pillDrawable(this, currentPalette)
+            binding.btnSelectMode.setTextColor(currentPalette.textPrimary)
             binding.multiSelectBar.visibility = View.GONE
             binding.fabAddPdf.visibility = View.VISIBLE
             binding.tvFabLabel.text = if (isSpecificCategorySelected()) {
@@ -417,12 +440,69 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (dateGrouped) {
-            binding.btnDateToggle.setBackgroundResource(R.drawable.bg_category_tag)
-            binding.tvDateToggle.setTextColor(ContextCompat.getColor(this, R.color.accent_blue))
+            binding.btnDateToggle.background = ThemeManager.categoryTagDrawable(this, currentPalette)
+            binding.tvDateToggle.setTextColor(currentPalette.accent)
         } else {
-            binding.btnDateToggle.setBackgroundResource(R.drawable.bg_glass_pill)
-            binding.tvDateToggle.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
+            binding.btnDateToggle.background = ThemeManager.pillDrawable(this, currentPalette)
+            binding.tvDateToggle.setTextColor(currentPalette.textPrimary)
         }
+    }
+
+    private fun openThemeSwitcher() {
+        GlassDialogs.showThemePickerDialog(this, currentTheme) { chosenTheme ->
+            currentTheme = chosenTheme
+            store.setAppThemeId(chosenTheme.id)
+            applyTheme(animate = true)
+        }
+    }
+
+    private fun openWelcomeNote() {
+        GlassDialogs.showWelcomeDialog(this, currentPalette) {
+            openThemeSwitcher()
+        }
+    }
+
+    private fun applyTheme(animate: Boolean) {
+        currentPalette = ThemeManager.getPalette(this, currentTheme)
+        val p = currentPalette
+
+        ThemeManager.applyAmbientBackground(binding.rootContainer, p, animate = animate)
+
+        binding.tvAppTitle.setTextColor(p.textPrimary)
+        binding.tvPersonalBadge.setTextColor(p.accent)
+        binding.tvSubtitle.setTextColor(p.textSecondary)
+
+        binding.btnTheme.background = ThemeManager.pillDrawable(this, p)
+        binding.viewThemeSwatch.background = ThemeManager.swatchOrbDrawable(this, currentTheme)
+        binding.btnRefresh.background = ThemeManager.pillDrawable(this, p)
+        binding.btnSort.background = ThemeManager.pillDrawable(this, p)
+        binding.tvSortLabel.setTextColor(p.textPrimary)
+
+        binding.searchPill.background = ThemeManager.pillDrawable(this, p)
+        binding.etSearch.setTextColor(p.textPrimary)
+        binding.etSearch.setHintTextColor(p.textTertiary)
+
+        binding.permissionBanner.background = ThemeManager.cardDrawable(this, p)
+        binding.btnGrantAccess.background = ThemeManager.activeChipDrawable(this, p)
+
+        binding.emptyState.background = ThemeManager.cardDrawable(this, p)
+        binding.tvEmptyTitle.setTextColor(p.textPrimary)
+        binding.tvEmptySubtitle.setTextColor(p.textSecondary)
+        binding.btnEmptyAction.background = ThemeManager.fabDrawable(this, p)
+
+        binding.progressScan.indeterminateTintList = ColorStateList.valueOf(p.accent)
+        binding.fabAddPdf.background = ThemeManager.fabDrawable(this, p)
+
+        binding.multiSelectBar.background = ThemeManager.readerBarDrawable(this, p)
+        binding.tvMultiCount.setTextColor(p.textPrimary)
+        binding.btnMultiSelectAll.background = ThemeManager.pillDrawable(this, p)
+        binding.btnMultiSelectAll.setTextColor(p.textPrimary)
+        binding.btnMultiMove.background = ThemeManager.activeChipDrawable(this, p)
+
+        updateSortAndDatePills()
+        updateFloatingControls()
+        categoryAdapter.updatePalette(p)
+        pdfAdapter.updatePalette(p)
     }
 
     private fun updatePermissionBanner() {
@@ -704,6 +784,7 @@ class MainActivity : AppCompatActivity() {
             context = this,
             item = item,
             currentCategory = currentCategory,
+            palette = currentPalette,
             onOpen = { openReader(item) },
             onCategorize = { showMoveCategory(item, currentCategory) },
             onRename = { showRenamePdf(item) },
@@ -713,7 +794,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showRenamePdf(item: PdfItem) {
-        GlassDialogs.showRenamePdfDialog(this, item.displayName) { newName ->
+        GlassDialogs.showRenamePdfDialog(this, item.displayName, currentPalette) { newName ->
             lifecycleScope.launch {
                 val res = PdfScanner.renamePdf(this@MainActivity, item, newName, store)
                 res.onSuccess { updated ->
@@ -737,12 +818,13 @@ class MainActivity : AppCompatActivity() {
             context = this,
             categories = store.getCategories(),
             currentCategory = currentCategory,
+            palette = currentPalette,
             onPickCategory = { chosen ->
                 store.setPdfCategory(item.key, chosen)
                 renderList()
             },
             onCreateNewCategory = {
-                GlassDialogs.showNewCategoryDialog(this) { newCat ->
+                GlassDialogs.showNewCategoryDialog(this, currentPalette) { newCat ->
                     store.addCategory(newCat)
                     store.setPdfCategory(item.key, newCat)
                     renderList()
@@ -757,13 +839,14 @@ class MainActivity : AppCompatActivity() {
             title = "Move ${keys.size} PDFs to",
             categories = store.getCategories(),
             currentCategory = null,
+            palette = currentPalette,
             onPickCategory = { chosen ->
                 keys.forEach { key -> store.setPdfCategory(key, chosen) }
                 exitMultiSelect()
                 renderList()
             },
             onCreateNewCategory = {
-                GlassDialogs.showNewCategoryDialog(this) { newCat ->
+                GlassDialogs.showNewCategoryDialog(this, currentPalette) { newCat ->
                     store.addCategory(newCat)
                     keys.forEach { key -> store.setPdfCategory(key, newCat) }
                     exitMultiSelect()
@@ -797,7 +880,8 @@ class MainActivity : AppCompatActivity() {
             context = this,
             title = getString(R.string.delete_confirm_title),
             body = body,
-            confirmLabel = if (item.source == PdfSource.IMPORTED) "Remove" else getString(R.string.delete_action)
+            confirmLabel = if (item.source == PdfSource.IMPORTED) "Remove" else getString(R.string.delete_action),
+            palette = currentPalette
         ) {
             lifecycleScope.launch {
                 val ok = PdfScanner.deletePdf(this@MainActivity, item, store)
@@ -824,7 +908,8 @@ class MainActivity : AppCompatActivity() {
         GlassDialogs.showDeleteConfirmDialog(
             context = this,
             title = "Delete ${itemsToDelete.size} PDFs?",
-            body = "Selected PDFs will be permanently deleted (imported links will be removed from LumePDF)."
+            body = "Selected PDFs will be permanently deleted (imported links will be removed from LumePDF).",
+            palette = currentPalette
         ) {
             lifecycleScope.launch {
                 val deletedKeys = HashSet<String>()

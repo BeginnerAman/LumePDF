@@ -8,36 +8,18 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.lumepdf.app"
+        applicationId = "com.lumepdf.ks"
         minSdk = 24
         targetSdk = 35
-        versionCode = 12
-        versionName = "1.5.0"
-    }
-
-    val releaseKeystorePath = System.getenv("RELEASE_STORE_FILE")
-    val hasReleaseKeystore = !releaseKeystorePath.isNullOrBlank() && file(releaseKeystorePath).exists()
-
-    signingConfigs {
-        if (hasReleaseKeystore) {
-            create("release") {
-                storeFile = file(releaseKeystorePath!!)
-                storePassword = System.getenv("RELEASE_STORE_PASSWORD")
-                keyAlias = System.getenv("RELEASE_KEY_ALIAS")
-                keyPassword = System.getenv("RELEASE_KEY_PASSWORD")
-            }
-        }
+        versionCode = 8
+        versionName = "1.3.0-ks"
     }
 
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = if (hasReleaseKeystore) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
-            }
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

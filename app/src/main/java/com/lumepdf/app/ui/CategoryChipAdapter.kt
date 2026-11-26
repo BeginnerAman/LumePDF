@@ -3,7 +3,6 @@ package com.lumepdf.app.ui
 import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.ViewGroup
-import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -15,6 +14,13 @@ class CategoryChipAdapter(
     private val onChipClick: (CategoryChip) -> Unit,
     private val onChipLongClick: (String) -> Unit
 ) : ListAdapter<CategoryChip, CategoryChipAdapter.ChipVH>(DiffCallback) {
+
+    private var palette: ThemeManager.ThemePalette? = null
+
+    fun updatePalette(newPalette: ThemeManager.ThemePalette) {
+        palette = newPalette
+        notifyDataSetChanged()
+    }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ChipVH {
         val binding = ItemCategoryChipBinding.inflate(
@@ -34,6 +40,7 @@ class CategoryChipAdapter(
 
         fun bind(chip: CategoryChip) {
             val ctx = binding.root.context
+            val p = palette ?: ThemeManager.getPalette(ctx, ThemeManager.AppTheme.LAVENDER)
             when (chip) {
                 is CategoryChip.Filter -> {
                     binding.tvChip.text = if (chip.count > 0) {
@@ -42,13 +49,11 @@ class CategoryChipAdapter(
                         chip.name
                     }
                     if (chip.isSelected) {
-                        binding.tvChip.setBackgroundResource(R.drawable.bg_glass_chip_active)
+                        binding.tvChip.background = ThemeManager.activeChipDrawable(ctx, p)
                         binding.tvChip.setTextColor(Color.WHITE)
                     } else {
-                        binding.tvChip.setBackgroundResource(R.drawable.bg_glass_chip_inactive)
-                        binding.tvChip.setTextColor(
-                            ContextCompat.getColor(ctx, R.color.text_primary)
-                        )
+                        binding.tvChip.background = ThemeManager.pillDrawable(ctx, p)
+                        binding.tvChip.setTextColor(p.textPrimary)
                     }
                     binding.tvChip.setOnClickListener { onChipClick(chip) }
                     binding.tvChip.setOnLongClickListener {
@@ -59,10 +64,8 @@ class CategoryChipAdapter(
 
                 CategoryChip.AddNew -> {
                     binding.tvChip.text = ctx.getString(R.string.new_category)
-                    binding.tvChip.setBackgroundResource(R.drawable.bg_glass_chip_inactive)
-                    binding.tvChip.setTextColor(
-                        ContextCompat.getColor(ctx, R.color.accent_blue)
-                    )
+                    binding.tvChip.background = ThemeManager.pillDrawable(ctx, p)
+                    binding.tvChip.setTextColor(p.accent)
                     binding.tvChip.setOnClickListener { onChipClick(chip) }
                     binding.tvChip.setOnLongClickListener(null)
                 }

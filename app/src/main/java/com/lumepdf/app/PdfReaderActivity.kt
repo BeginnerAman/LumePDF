@@ -1,6 +1,7 @@
 package com.lumepdf.app
 
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Color
 import android.net.Uri
@@ -15,7 +16,6 @@ import android.widget.SeekBar
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
@@ -26,6 +26,7 @@ import com.lumepdf.app.data.PdfStore
 import com.lumepdf.app.databinding.ActivityPdfReaderBinding
 import com.lumepdf.app.ui.PdfPageAdapter
 import com.lumepdf.app.ui.PdfPageRenderer
+import com.lumepdf.app.ui.ThemeManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -48,6 +49,7 @@ class PdfReaderActivity : AppCompatActivity() {
     private var keepScreenOn: Boolean = true
     private var shouldPersistProgress: Boolean = false
     private var autoHideJob: Job? = null
+    private lateinit var palette: ThemeManager.ThemePalette
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -56,9 +58,11 @@ class PdfReaderActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         store = PdfStore(this)
+        palette = ThemeManager.getPalette(this, ThemeManager.AppTheme.fromId(store.getAppThemeId()))
         nightMode = store.isReaderNightMode()
         cropMargins = store.isReaderCropMargins()
         keepScreenOn = store.isKeepScreenOn()
+        applyReaderTheme()
         applyNightBackground()
         applyKeepScreenOn()
         updateToggleStates()
@@ -197,9 +201,23 @@ class PdfReaderActivity : AppCompatActivity() {
         }
     }
 
+    private fun applyReaderTheme() {
+        binding.topBar.background = ThemeManager.readerBarDrawable(this, palette)
+        binding.bottomBar.background = ThemeManager.readerBarDrawable(this, palette)
+        binding.tvCornerPagePill.background = ThemeManager.readerBarDrawable(this, palette)
+        binding.tvCornerPagePill.setTextColor(palette.textPrimary)
+        binding.tvReaderTitle.setTextColor(palette.textPrimary)
+        binding.tvPageCounter.setTextColor(palette.textPrimary)
+        binding.readerError.background = ThemeManager.cardDrawable(this, palette)
+        binding.tvReaderError.setTextColor(palette.textPrimary)
+        binding.progressReader.indeterminateTintList = ColorStateList.valueOf(palette.accent)
+        binding.seekPage.progressTintList = ColorStateList.valueOf(palette.accent)
+        binding.seekPage.thumbTintList = ColorStateList.valueOf(palette.accent)
+    }
+
     private fun updateToggleStates() {
-        val activeColor = ContextCompat.getColor(this, R.color.accent_blue)
-        val normalColor = ContextCompat.getColor(this, R.color.text_primary)
+        val activeColor = palette.accent
+        val normalColor = palette.textPrimary
         binding.btnScreenOnToggle.setColorFilter(if (keepScreenOn) activeColor else normalColor)
         binding.btnCropToggle.setColorFilter(if (cropMargins) activeColor else normalColor)
         binding.btnNightToggle.setColorFilter(if (nightMode) activeColor else normalColor)
@@ -379,7 +397,7 @@ class PdfReaderActivity : AppCompatActivity() {
         val bgColor = if (nightMode) {
             Color.parseColor("#05070B")
         } else {
-            ContextCompat.getColor(this, R.color.reader_bg)
+            palette.readerBg
         }
         binding.readerRoot.setBackgroundColor(bgColor)
     }

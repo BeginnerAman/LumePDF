@@ -1,5 +1,6 @@
 package com.lumepdf.app.ui
 
+import android.content.res.ColorStateList
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -24,6 +25,12 @@ class PdfListAdapter(
         private set
 
     private var selectedKeys: Set<String> = emptySet()
+    private var palette: ThemeManager.ThemePalette? = null
+
+    fun updatePalette(newPalette: ThemeManager.ThemePalette) {
+        palette = newPalette
+        notifyDataSetChanged()
+    }
 
     fun updateSelectionState(enabled: Boolean, keys: Set<String>) {
         val modeChanged = selectionMode != enabled
@@ -71,30 +78,44 @@ class PdfListAdapter(
         }
     }
 
-    class HeaderVH(private val binding: ItemDateHeaderBinding) :
+    inner class HeaderVH(private val binding: ItemDateHeaderBinding) :
         RecyclerView.ViewHolder(binding.root) {
         fun bind(row: PdfListRow.DateHeader) {
+            val ctx = binding.root.context
+            val p = palette ?: ThemeManager.getPalette(ctx, ThemeManager.AppTheme.LAVENDER)
             binding.tvDateHeader.text = row.label
+            binding.tvDateHeader.setTextColor(p.textSecondary)
             binding.tvDateCount.text = "${row.count}"
+            binding.tvDateCount.setTextColor(p.textTertiary)
         }
     }
 
     inner class PdfVH(private val binding: ItemPdfBinding) :
         RecyclerView.ViewHolder(binding.root) {
         fun bind(row: PdfListRow.PdfEntry) {
+            val ctx = binding.root.context
+            val p = palette ?: ThemeManager.getPalette(ctx, ThemeManager.AppTheme.LAVENDER)
             val item = row.item
+
+            binding.root.background = ThemeManager.cardDrawable(ctx, p)
             binding.tvPdfName.text = item.displayName
+            binding.tvPdfName.setTextColor(p.textPrimary)
 
             val dateStr = PdfFormatters.formatShortDate(item.dateModifiedMillis)
             val sizeStr = PdfFormatters.formatSize(item.sizeBytes)
             binding.tvPdfMeta.text = "$dateStr • $sizeStr"
+            binding.tvPdfMeta.setTextColor(p.textSecondary)
 
             if (row.totalPages > 0) {
                 val pageNum = (row.currentPage + 1).coerceIn(1, row.totalPages)
                 val pct = ((pageNum * 100f) / row.totalPages).toInt().coerceIn(2, 100)
                 binding.progressRow.visibility = View.VISIBLE
                 binding.progressReading.progress = pct
+                binding.progressReading.progressTintList = ColorStateList.valueOf(p.accent)
+                binding.progressReading.progressBackgroundTintList =
+                    ColorStateList.valueOf(p.glassStrokeSubtle)
                 binding.tvPageProgress.text = "Pg $pageNum/${row.totalPages}"
+                binding.tvPageProgress.setTextColor(p.accent)
             } else {
                 binding.progressRow.visibility = View.GONE
             }
@@ -104,6 +125,8 @@ class PdfListAdapter(
             } else {
                 binding.tvCategoryBadge.visibility = View.VISIBLE
                 binding.tvCategoryBadge.text = row.category
+                binding.tvCategoryBadge.background = ThemeManager.categoryTagDrawable(ctx, p)
+                binding.tvCategoryBadge.setTextColor(p.accent)
             }
 
             bindSelection(item)
@@ -127,15 +150,17 @@ class PdfListAdapter(
         }
 
         fun bindSelection(item: PdfItem) {
+            val ctx = binding.root.context
+            val p = palette ?: ThemeManager.getPalette(ctx, ThemeManager.AppTheme.LAVENDER)
             if (selectionMode) {
                 binding.btnMore.visibility = View.GONE
                 binding.ivSelectCheck.visibility = View.VISIBLE
                 val checked = selectedKeys.contains(item.key)
                 if (checked) {
-                    binding.ivSelectCheck.setBackgroundResource(R.drawable.bg_check_circle_on)
+                    binding.ivSelectCheck.background = ThemeManager.checkCircleOnDrawable(p)
                     binding.ivSelectCheck.setImageResource(R.drawable.ic_check)
                 } else {
-                    binding.ivSelectCheck.setBackgroundResource(R.drawable.bg_check_circle_off)
+                    binding.ivSelectCheck.background = ThemeManager.checkCircleOffDrawable(ctx, p)
                     binding.ivSelectCheck.setImageDrawable(null)
                 }
             } else {
