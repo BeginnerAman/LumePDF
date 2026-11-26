@@ -209,11 +209,11 @@ class PdfReaderActivity : AppCompatActivity() {
 
                 binding.rvPages.addOnScrollListener(object : RecyclerView.OnScrollListener() {
                     override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-                        val first = layoutManager.findFirstVisibleItemPosition()
-                        if (first != RecyclerView.NO_POSITION && first != currentPage) {
-                            currentPage = first
-                            updatePageLabel(first)
-                            binding.seekPage.progress = first
+                        val dominant = resolveDominantVisiblePage(recyclerView)
+                        if (dominant != currentPage) {
+                            currentPage = dominant
+                            updatePageLabel(dominant)
+                            binding.seekPage.progress = dominant
                         }
                     }
                 })
@@ -244,6 +244,39 @@ class PdfReaderActivity : AppCompatActivity() {
                 scheduleAutoHide()
             }
         }
+    }
+
+    private fun resolveDominantVisiblePage(recyclerView: RecyclerView): Int {
+        if (totalPages <= 0) return 0
+        if (!recyclerView.canScrollVertically(1) ||
+            layoutManager.findLastCompletelyVisibleItemPosition() == totalPages - 1
+        ) {
+            return totalPages - 1
+        }
+        if (!recyclerView.canScrollVertically(-1) ||
+            layoutManager.findFirstCompletelyVisibleItemPosition() == 0
+        ) {
+            return 0
+        }
+
+        val rvTop = recyclerView.paddingTop
+        val rvBottom = recyclerView.height - recyclerView.paddingBottom
+        var bestPos = layoutManager.findFirstVisibleItemPosition()
+        var bestVisibleHeight = -1
+
+        for (i in 0 until recyclerView.childCount) {
+            val child = recyclerView.getChildAt(i) ?: continue
+            val pos = recyclerView.getChildAdapterPosition(child)
+            if (pos == RecyclerView.NO_POSITION) continue
+            val visibleTop = maxOf(child.top, rvTop)
+            val visibleBottom = minOf(child.bottom, rvBottom)
+            val visibleH = (visibleBottom - visibleTop).coerceAtLeast(0)
+            if (visibleH > bestVisibleHeight) {
+                bestVisibleHeight = visibleH
+                bestPos = pos
+            }
+        }
+        return bestPos.coerceIn(0, totalPages - 1)
     }
 
     private fun updatePageLabel(index: Int) {

@@ -250,8 +250,10 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:clipToPadding="false"
+            android:fadingEdgeLength="28dp"
             android:paddingHorizontal="20dp"
-            android:paddingBottom="10dp" />
+            android:paddingBottom="10dp"
+            android:requiresFadingEdge="horizontal" />
 
         <!-- PDF List -->
         <FrameLayout
@@ -264,9 +266,11 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:clipToPadding="false"
-                android:paddingHorizontal="16dp"
+                android:paddingHorizontal="18dp"
                 android:paddingTop="2dp"
                 android:paddingBottom="96dp"
+                android:scrollbarSize="3dp"
+                android:scrollbarStyle="outsideOverlay"
                 android:scrollbars="vertical" />
 
             <!-- Empty State Glass Card -->
