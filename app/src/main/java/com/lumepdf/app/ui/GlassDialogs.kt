@@ -116,7 +116,7 @@ object GlassDialogs {
         val dialog = createGlassDialog(context, binding.root)
         binding.tvDialogTitle.text = item.displayName
         binding.tvDialogSubtitle.visibility = View.VISIBLE
-        binding.tvDialogSubtitle.text = currentCategory?.let { "Category: $it" } ?: "Uncategorized"
+        binding.tvDialogSubtitle.text = currentCategory?.let { "Category: $it" } ?: "Other"
 
         addOptionRow(context, binding.listContainer, "Open & Read") {
             dialog.dismiss()
@@ -235,7 +235,7 @@ object GlassDialogs {
                     fun bind(pdf: PdfItem) {
                         itemBinding.tvPickName.text = pdf.displayName
                         val existingCat = categoryMap[pdf.key]
-                        val catLabel = existingCat ?: "Uncategorized"
+                        val catLabel = existingCat ?: "Other"
                         val sizeStr = PdfFormatters.formatSize(pdf.sizeBytes)
                         itemBinding.tvPickMeta.text = "$catLabel • $sizeStr"
 

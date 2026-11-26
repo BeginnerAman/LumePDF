@@ -158,7 +158,7 @@ class MainActivity : AppCompatActivity() {
                     GlassDialogs.showDeleteConfirmDialog(
                         context = this,
                         title = "Delete Category?",
-                        body = "Remove “$catName”? PDFs inside it will become Uncategorized."
+                        body = "Remove “$catName”? PDFs inside it will move to Other."
                     ) {
                         store.deleteCategory(catName)
                         if (selectedCategory.equals(catName, ignoreCase = true)) {
@@ -695,7 +695,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val ALL_CATEGORY = "All"
-        private const val UNCATEGORIZED_CATEGORY = "Uncategorized"
+        private const val UNCATEGORIZED_CATEGORY = "Other"
         private const val STATE_CATEGORY = "state_category"
         private const val STATE_SEARCH = "state_search"
     }

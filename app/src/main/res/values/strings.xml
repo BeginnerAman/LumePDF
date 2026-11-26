@@ -7,7 +7,7 @@
     <string name="select_label">Select</string>
     <string name="done_label">Done</string>
     <string name="all_category">All</string>
-    <string name="uncategorized">Uncategorized</string>
+    <string name="uncategorized">Other</string>
     <string name="new_category">+ New</string>
     <string name="sort_label">Sort</string>
     <string name="date_group_label">By Date</string>
