@@ -26,9 +26,19 @@ class PdfPageAdapter(
             }
         }
 
+    var cropMargins: Boolean = false
+        set(value) {
+            if (field != value) {
+                field = value
+                renderer.clearCache()
+                notifyDataSetChanged()
+            }
+        }
+
     fun updatePageWidth(newWidthPx: Int) {
         if (newWidthPx > 0 && newWidthPx != pageWidthPx) {
             pageWidthPx = newWidthPx
+            renderer.clearCache()
             notifyDataSetChanged()
         }
     }
@@ -102,9 +112,9 @@ class PdfPageAdapter(
             binding.tvPagePlaceholder.visibility = View.VISIBLE
             binding.tvPagePlaceholder.text = "Page ${position + 1}"
 
-            val renderTargetWidth = (pageWidthPx * 1.25f).toInt().coerceAtLeast(1080)
+            val renderTargetWidth = (pageWidthPx * 1.15f).toInt().coerceIn(1080, 2200)
             job = scope.launch {
-                val bmp = renderer.renderPage(position, renderTargetWidth)
+                val bmp = renderer.renderPage(position, renderTargetWidth, cropMargins)
                 if (bmp != null && bindingAdapterPosition == position) {
                     val actualRatio = bmp.height.toFloat() / bmp.width.coerceAtLeast(1).toFloat()
                     val exactH = (pageWidthPx * actualRatio).toInt().coerceAtLeast(200)

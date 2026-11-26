@@ -16,7 +16,7 @@ import java.io.File
 
 /**
  * Thread-safe, low-RAM wrapper over Android's native PdfRenderer.
- * Uses a bounded LruCache so scrolling stays smooth without bloating memory.
+ * Supports crisp landscape rendering and fast optional whitespace margin cropping.
  */
 class PdfPageRenderer private constructor(
     private val pfd: ParcelFileDescriptor,
@@ -29,7 +29,7 @@ class PdfPageRenderer private constructor(
 
     private val maxCacheBytes: Int = run {
         val maxMem = Runtime.getRuntime().maxMemory().toInt()
-        (maxMem / 10).coerceIn(6 * 1024 * 1024, 24 * 1024 * 1024)
+        (maxMem / 6).coerceIn(16 * 1024 * 1024, 48 * 1024 * 1024)
     }
 
     private val cache = object : LruCache<Int, Bitmap>(maxCacheBytes) {
@@ -40,46 +40,118 @@ class PdfPageRenderer private constructor(
 
     fun getAspectRatio(pageIndex: Int): Float? = pageAspectRatios.getOrNull(pageIndex)
 
-    suspend fun renderPage(pageIndex: Int, targetWidthPx: Int): Bitmap? =
-        withContext(Dispatchers.IO) {
-            if (pageIndex < 0 || pageIndex >= pageCount) return@withContext null
-            cache.get(pageIndex)?.let { cached ->
-                if (!cached.isRecycled) return@withContext cached
-            }
+    fun clearCache() {
+        cache.evictAll()
+        pageAspectRatios.fill(null)
+    }
 
-            mutex.withLock {
-                cache.get(pageIndex)?.let { cached ->
-                    if (!cached.isRecycled) return@withLock cached
-                }
-
-                runCatching {
-                    renderer.openPage(pageIndex).use { page ->
-                        val ratio = page.height.toFloat() / page.width.coerceAtLeast(1).toFloat()
-                        pageAspectRatios[pageIndex] = ratio
-
-                        val renderWidth = targetWidthPx.coerceIn(480, 1440)
-                        val renderHeight = (renderWidth * ratio).toInt().coerceIn(200, 2600)
-
-                        val bitmap = Bitmap.createBitmap(
-                            renderWidth,
-                            renderHeight,
-                            Bitmap.Config.ARGB_8888
-                        )
-                        val canvas = Canvas(bitmap)
-                        canvas.drawColor(Color.WHITE)
-
-                        page.render(
-                            bitmap,
-                            null,
-                            null,
-                            PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY
-                        )
-                        cache.put(pageIndex, bitmap)
-                        bitmap
-                    }
-                }.getOrNull()
-            }
+    suspend fun renderPage(
+        pageIndex: Int,
+        targetWidthPx: Int,
+        cropMargins: Boolean
+    ): Bitmap? = withContext(Dispatchers.IO) {
+        if (pageIndex < 0 || pageIndex >= pageCount) return@withContext null
+        cache.get(pageIndex)?.let { cached ->
+            if (!cached.isRecycled) return@withContext cached
         }
+
+        mutex.withLock {
+            cache.get(pageIndex)?.let { cached ->
+                if (!cached.isRecycled) return@withLock cached
+            }
+
+            runCatching {
+                renderer.openPage(pageIndex).use { page ->
+                    val rawRatio = page.height.toFloat() / page.width.coerceAtLeast(1).toFloat()
+                    val renderWidth = targetWidthPx.coerceIn(600, 2200)
+                    val renderHeight = (renderWidth * rawRatio).toInt().coerceIn(200, 3400)
+
+                    val rawBitmap = Bitmap.createBitmap(
+                        renderWidth,
+                        renderHeight,
+                        Bitmap.Config.ARGB_8888
+                    )
+                    val canvas = Canvas(rawBitmap)
+                    canvas.drawColor(Color.WHITE)
+
+                    page.render(
+                        rawBitmap,
+                        null,
+                        null,
+                        PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY
+                    )
+
+                    val finalBitmap = if (cropMargins) {
+                        trimWhiteMargins(rawBitmap)
+                    } else {
+                        rawBitmap
+                    }
+
+                    pageAspectRatios[pageIndex] =
+                        finalBitmap.height.toFloat() / finalBitmap.width.coerceAtLeast(1).toFloat()
+                    cache.put(pageIndex, finalBitmap)
+                    finalBitmap
+                }
+            }.getOrNull()
+        }
+    }
+
+    private fun trimWhiteMargins(src: Bitmap): Bitmap {
+        val w = src.width
+        val h = src.height
+        val pixels = IntArray(w * h)
+        src.getPixels(pixels, 0, w, 0, 0, w, h)
+
+        val step = 6
+        var minX = w
+        var minY = h
+        var maxX = -1
+        var maxY = -1
+
+        var y = 0
+        while (y < h) {
+            val rowOffset = y * w
+            var x = 0
+            while (x < w) {
+                val c = pixels[rowOffset + x]
+                val r = (c shr 16) and 0xFF
+                val g = (c shr 8) and 0xFF
+                val b = c and 0xFF
+                if (r < 245 || g < 245 || b < 245) {
+                    if (x < minX) minX = x
+                    if (x > maxX) maxX = x
+                    if (y < minY) minY = y
+                    if (y > maxY) maxY = y
+                }
+                x += step
+            }
+            y += step
+        }
+
+        if (maxX <= minX || maxY <= minY) return src
+
+        val padX = (w * 0.025f).toInt().coerceAtLeast(12)
+        val padY = (h * 0.02f).toInt().coerceAtLeast(12)
+
+        val left = (minX - padX).coerceAtLeast(0)
+        val top = (minY - padY).coerceAtLeast(0)
+        val right = (maxX + step + padX).coerceAtMost(w)
+        val bottom = (maxY + step + padY).coerceAtMost(h)
+
+        val cropW = right - left
+        val cropH = bottom - top
+
+        // Only crop if it removes meaningful blank margin (> 6% saved)
+        if (cropW < 120 || cropH < 120 || (cropW > w * 0.94f && cropH > h * 0.94f)) {
+            return src
+        }
+
+        val cropped = Bitmap.createBitmap(src, left, top, cropW, cropH)
+        if (cropped !== src) {
+            src.recycle()
+        }
+        return cropped
+    }
 
     fun close() {
         cache.evictAll()

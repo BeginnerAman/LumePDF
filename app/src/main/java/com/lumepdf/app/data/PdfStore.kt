@@ -170,6 +170,12 @@ class PdfStore(context: Context) {
         prefs.edit().putBoolean(KEY_READER_NIGHT, enabled).apply()
     }
 
+    fun isReaderCropMargins(): Boolean = prefs.getBoolean(KEY_READER_CROP, false)
+
+    fun setReaderCropMargins(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_READER_CROP, enabled).apply()
+    }
+
     companion object {
         private const val PREFS_NAME = "lumepdf_store"
         private const val KEY_CATEGORIES = "categories"
@@ -179,5 +185,6 @@ class PdfStore(context: Context) {
         private const val KEY_DATE_GROUPED = "date_grouped"
         private const val KEY_LAST_PAGES = "last_pages"
         private const val KEY_READER_NIGHT = "reader_night"
+        private const val KEY_READER_CROP = "reader_crop"
     }
 }
