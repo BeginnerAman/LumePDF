@@ -74,15 +74,34 @@
                 android:textSize="12sp" />
         </LinearLayout>
 
-        <ProgressBar
-            android:id="@+id/progressReading"
-            style="?android:attr/progressBarStyleHorizontal"
+        <LinearLayout
+            android:id="@+id/progressRow"
             android:layout_width="match_parent"
-            android:layout_height="3dp"
+            android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            android:max="100"
-            android:progressDrawable="@drawable/bg_reading_progress"
-            android:visibility="gone" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <ProgressBar
+                android:id="@+id/progressReading"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="0dp"
+                android:layout_height="3dp"
+                android:layout_weight="1"
+                android:max="100"
+                android:progressDrawable="@drawable/bg_reading_progress" />
+
+            <TextView
+                android:id="@+id/tvPageProgress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:fontFamily="sans-serif-medium"
+                android:maxLines="1"
+                android:textColor="@color/accent_blue"
+                android:textSize="11sp" />
+        </LinearLayout>
     </LinearLayout>
 
     <ImageButton
