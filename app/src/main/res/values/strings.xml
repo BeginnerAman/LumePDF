@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">LumePDF</string>
+    <string name="subtitle_scanning">Scanning PDFs…</string>
+    <string name="search_hint">Search PDFs…</string>
+    <string name="add_pdf">Add PDF</string>
+    <string name="all_category">All</string>
+    <string name="uncategorized">Uncategorized</string>
+    <string name="new_category">+ New</string>
+    <string name="sort_label">Sort</string>
+    <string name="date_group_label">By Date</string>
+    <string name="permission_banner_title">Auto-Scan All Phone PDFs</string>
+    <string name="permission_banner_body">Allow file access so LumePDF can automatically find, sort, and delete PDFs across your device.</string>
+    <string name="permission_banner_cta">Allow Access</string>
+    <string name="empty_title">No PDFs Found</string>
+    <string name="empty_subtitle">Tap “Add PDF” below or allow file access to automatically detect PDFs on your phone.</string>
+    <string name="delete_confirm_title">Delete PDF?</string>
+    <string name="delete_confirm_body">“%1$s” will be permanently removed.</string>
+    <string name="delete_confirm_imported">“%1$s” will be removed from LumePDF.</string>
+    <string name="delete_action">Delete</string>
+    <string name="cancel">Cancel</string>
+    <string name="save">Save</string>
+</resources>

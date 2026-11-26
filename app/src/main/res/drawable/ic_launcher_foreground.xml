@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Frosted glass document sheet -->
+    <path
+        android:fillColor="#D9FFFFFF"
+        android:pathData="M34,26 L62,26 L74,38 L74,78 C74,80.2 72.2,82 70,82 L34,82 C31.8,82 30,80.2 30,78 L30,30 C30,27.8 31.8,26 34,26 Z" />
+    <!-- Folded top-right glass corner -->
+    <path
+        android:fillColor="#73FFFFFF"
+        android:pathData="M62,26 L74,38 L64,38 C62.9,38 62,37.1 62,36 Z" />
+    <!-- Subtle inner glass lines -->
+    <path
+        android:fillColor="#FF0A84FF"
+        android:pathData="M38,48 L56,48 C57.1,48 58,48.9 58,50 C58,51.1 57.1,52 56,52 L38,52 C36.9,52 36,51.1 36,50 C36,48.9 36.9,48 38,48 Z" />
+    <path
+        android:fillColor="#880A84FF"
+        android:pathData="M38,58 L66,58 C67.1,58 68,58.9 68,60 C68,61.1 67.1,62 66,62 L38,62 C36.9,62 36,61.1 36,60 C36,58.9 36.9,58 38,58 Z" />
+    <path
+        android:fillColor="#660A84FF"
+        android:pathData="M38,68 L59,68 C60.1,68 61,68.9 61,70 C61,71.1 60.1,72 59,72 L38,72 C36.9,72 36,71.1 36,70 C36,68.9 36.9,68 38,68 Z" />
+</vector>

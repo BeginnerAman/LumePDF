@@ -1,0 +1,63 @@
+name: Build LumePDF APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build Release & Debug APKs
+        run: gradle assembleRelease assembleDebug --no-daemon
+
+      - name: Prepare APK outputs
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release.apk dist/LumePDF-release.apk
+          cp app/build/outputs/apk/debug/app-debug.apk dist/LumePDF-debug.apk
+          ls -lh dist/
+
+      - name: Upload Release APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LumePDF-release-apk
+          path: dist/LumePDF-release.apk
+
+      - name: Upload Debug APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LumePDF-debug-apk
+          path: dist/LumePDF-debug.apk
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: LumePDF v1.0.${{ github.run_number }}
+          body: |
+            Automated cloud APK build for **LumePDF**.
+            - `LumePDF-release.apk` — Optimized, ultra-lightweight R8 release build (recommended)
+            - `LumePDF-debug.apk` — Debug build
+          files: |
+            dist/LumePDF-release.apk
+            dist/LumePDF-debug.apk

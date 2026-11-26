@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg_top">#090D16</color>
+    <color name="bg_mid">#0E1422</color>
+    <color name="bg_bottom">#121B2E</color>
+
+    <color name="glass_surface">#B81A2336</color>
+    <color name="glass_surface_strong">#E61C263B</color>
+    <color name="glass_pill">#B3202B42</color>
+    <color name="glass_stroke">#2EFFFFFF</color>
+    <color name="glass_stroke_subtle">#1EFFFFFF</color>
+
+    <color name="text_primary">#F4F7FF</color>
+    <color name="text_secondary">#A3B1C9</color>
+    <color name="text_tertiary">#72819B</color>
+
+    <color name="accent_blue">#389BFF</color>
+    <color name="accent_blue_soft">#2E389BFF</color>
+    <color name="accent_red">#FF574D</color>
+    <color name="accent_red_soft">#29FF574D</color>
+    <color name="reader_bg">#080B12</color>
+    <color name="reader_bar_bg">#D9151D2E</color>
+    <color name="dialog_scrim">#88000000</color>
+</resources>
