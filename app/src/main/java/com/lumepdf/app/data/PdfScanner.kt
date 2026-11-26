@@ -317,11 +317,16 @@ object PdfScanner {
                     name = newFileName
                 )
             } else {
-                val renamedUri = DocumentsContract.renameDocument(
-                    context.contentResolver,
-                    item.uri,
-                    newFileName
-                ) ?: error("Rename not supported for this file location")
+                if (item.source == PdfSource.AUTO_SCANNED && !hasFullAutoScanPermission(context)) {
+                    error("Allow file access in settings to rename this PDF")
+                }
+                val renamedUri = runCatching {
+                    DocumentsContract.renameDocument(
+                        context.contentResolver,
+                        item.uri,
+                        newFileName
+                    )
+                }.getOrNull() ?: error("Rename not supported for this file location")
                 val newKey = renamedUri.toString()
                 store.migratePdfKey(item.key, newKey)
                 item.copy(

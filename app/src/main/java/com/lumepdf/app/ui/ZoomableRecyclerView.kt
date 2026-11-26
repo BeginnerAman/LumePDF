@@ -325,6 +325,18 @@ class ZoomableRecyclerView @JvmOverloads constructor(
         velocityTracker = null
     }
 
+    fun resetZoom() {
+        scroller.forceFinished(true)
+        recycleVelocityTracker()
+        scaleFactor = 1f
+        panX = 0f
+        panY = 0f
+        scrollRemainderY = 0f
+        isPanning = false
+        wasPinching = false
+        invalidate()
+    }
+
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         clampPan()

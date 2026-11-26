@@ -1,5 +1,6 @@
 package com.lumepdf.app
 
+import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color
 import android.net.Uri
@@ -45,6 +46,7 @@ class PdfReaderActivity : AppCompatActivity() {
     private var nightMode: Boolean = false
     private var cropMargins: Boolean = false
     private var keepScreenOn: Boolean = true
+    private var shouldPersistProgress: Boolean = false
     private var autoHideJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -70,12 +72,26 @@ class PdfReaderActivity : AppCompatActivity() {
             insets
         }
 
-        val uriStr = intent.getStringExtra(EXTRA_URI) ?: intent.data?.toString()
-        val uri = uriStr?.let { runCatching { Uri.parse(it) }.getOrNull() }
-        val filePath = intent.getStringExtra(EXTRA_PATH)
-        pdfKey = intent.getStringExtra(EXTRA_KEY) ?: uriStr.orEmpty()
+        val isExternalView = intent.action == Intent.ACTION_VIEW
+        val uri: Uri?
+        val filePath: String?
+        val title: String
 
-        val title = intent.getStringExtra(EXTRA_TITLE) ?: resolveTitle(uri) ?: "Document"
+        if (isExternalView) {
+            // Untrusted external caller: only accept intent.data and ignore internal extras
+            uri = intent.data
+            filePath = null
+            pdfKey = ""
+            shouldPersistProgress = false
+            title = resolveTitle(uri) ?: "Document"
+        } else {
+            val uriStr = intent.getStringExtra(EXTRA_URI) ?: intent.data?.toString()
+            uri = uriStr?.let { runCatching { Uri.parse(it) }.getOrNull() }
+            filePath = intent.getStringExtra(EXTRA_PATH)
+            pdfKey = intent.getStringExtra(EXTRA_KEY) ?: uriStr.orEmpty()
+            shouldPersistProgress = pdfKey.isNotEmpty()
+            title = intent.getStringExtra(EXTRA_TITLE) ?: resolveTitle(uri) ?: "Document"
+        }
         binding.tvReaderTitle.text = title
 
         binding.btnBack.setOnClickListener { finish() }
@@ -128,6 +144,7 @@ class PdfReaderActivity : AppCompatActivity() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         applyOrientationBarLayout(newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE)
+        binding.rvPages.resetZoom()
         binding.rvPages.post {
             val newWidth = calculatePageWidthPx()
             pageAdapter?.updatePageWidth(newWidth)
@@ -209,7 +226,7 @@ class PdfReaderActivity : AppCompatActivity() {
                     showError("This PDF has no pages.")
                     return@onSuccess
                 }
-                if (pdfKey.isNotEmpty()) {
+                if (shouldPersistProgress) {
                     store.setPageCount(pdfKey, totalPages)
                 }
 
@@ -335,23 +352,26 @@ class PdfReaderActivity : AppCompatActivity() {
         barsVisible = visible
         val targetAlpha = if (visible) 1f else 0f
 
+        binding.topBar.animate().cancel()
         binding.topBar.animate().alpha(targetAlpha).setDuration(160).withStartAction {
             if (visible) binding.topBar.visibility = View.VISIBLE
         }.withEndAction {
-            if (!visible) binding.topBar.visibility = View.GONE
+            if (!barsVisible) binding.topBar.visibility = View.GONE
         }.start()
 
+        binding.bottomBar.animate().cancel()
         binding.bottomBar.animate().alpha(targetAlpha).setDuration(160).withStartAction {
             if (visible) binding.bottomBar.visibility = View.VISIBLE
         }.withEndAction {
-            if (!visible) binding.bottomBar.visibility = View.GONE
+            if (!barsVisible) binding.bottomBar.visibility = View.GONE
         }.start()
 
         val pillAlpha = if (visible) 0f else 0.92f
+        binding.tvCornerPagePill.animate().cancel()
         binding.tvCornerPagePill.animate().alpha(pillAlpha).setDuration(160).withStartAction {
             if (!visible && totalPages > 0) binding.tvCornerPagePill.visibility = View.VISIBLE
         }.withEndAction {
-            if (visible) binding.tvCornerPagePill.visibility = View.GONE
+            if (barsVisible) binding.tvCornerPagePill.visibility = View.GONE
         }.start()
     }
 
@@ -385,7 +405,7 @@ class PdfReaderActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
-        if (pdfKey.isNotEmpty() && totalPages > 0) {
+        if (shouldPersistProgress && totalPages > 0) {
             store.setLastPage(pdfKey, currentPage)
         }
     }

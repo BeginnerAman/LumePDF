@@ -227,52 +227,12 @@ object GlassDialogs {
             binding.btnPickConfirm.text = if (selected.isEmpty()) "Save" else "Save (${selected.size})"
         }
 
-        val pickAdapter = object : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
-            override fun getItemCount(): Int = filtered.size
-
-            override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
-                val itemBinding = ItemPickPdfBinding.inflate(
-                    LayoutInflater.from(parent.context),
-                    parent,
-                    false
-                )
-                return object : RecyclerView.ViewHolder(itemBinding.root) {
-                    fun bind(pdf: PdfItem) {
-                        itemBinding.tvPickName.text = pdf.displayName
-                        val existingCat = categoryMap[pdf.key]
-                        val catLabel = existingCat ?: "Other"
-                        val sizeStr = PdfFormatters.formatSize(pdf.sizeBytes)
-                        itemBinding.tvPickMeta.text = "$catLabel • $sizeStr"
-
-                        val checked = selected.contains(pdf.key)
-                        if (checked) {
-                            itemBinding.ivPickCheck.setBackgroundResource(R.drawable.bg_check_circle_on)
-                            itemBinding.ivPickCheck.setImageResource(R.drawable.ic_check)
-                        } else {
-                            itemBinding.ivPickCheck.setBackgroundResource(R.drawable.bg_check_circle_off)
-                            itemBinding.ivPickCheck.setImageDrawable(null)
-                        }
-
-                        itemBinding.root.setOnClickListener {
-                            if (selected.contains(pdf.key)) {
-                                selected.remove(pdf.key)
-                            } else {
-                                selected.add(pdf.key)
-                            }
-                            val pos = bindingAdapterPosition
-                            if (pos != RecyclerView.NO_POSITION) notifyItemChanged(pos)
-                            updateLabels()
-                        }
-                    }
-                }
-            }
-
-            override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-                val pdf = filtered[position]
-                val itemBinding = ItemPickPdfBinding.bind(holder.itemView)
+        class PickVH(val itemBinding: ItemPickPdfBinding) :
+            RecyclerView.ViewHolder(itemBinding.root) {
+            fun bind(pdf: PdfItem) {
                 itemBinding.tvPickName.text = pdf.displayName
                 val existingCat = categoryMap[pdf.key]
-                val catLabel = existingCat ?: "Uncategorized"
+                val catLabel = existingCat ?: "Other"
                 val sizeStr = PdfFormatters.formatSize(pdf.sizeBytes)
                 itemBinding.tvPickMeta.text = "$catLabel • $sizeStr"
 
@@ -291,10 +251,27 @@ object GlassDialogs {
                     } else {
                         selected.add(pdf.key)
                     }
-                    val pos = holder.bindingAdapterPosition
+                    val pos = bindingAdapterPosition
                     if (pos != RecyclerView.NO_POSITION) notifyItemChanged(pos)
                     updateLabels()
                 }
+            }
+        }
+
+        val pickAdapter = object : RecyclerView.Adapter<PickVH>() {
+            override fun getItemCount(): Int = filtered.size
+
+            override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PickVH {
+                val itemBinding = ItemPickPdfBinding.inflate(
+                    LayoutInflater.from(parent.context),
+                    parent,
+                    false
+                )
+                return PickVH(itemBinding)
+            }
+
+            override fun onBindViewHolder(holder: PickVH, position: Int) {
+                holder.bind(filtered[position])
             }
         }
 

@@ -28,8 +28,8 @@ class PdfPageRenderer private constructor(
     private val pageAspectRatios = arrayOfNulls<Float>(pageCount)
 
     private val maxCacheBytes: Int = run {
-        val maxMem = Runtime.getRuntime().maxMemory().toInt()
-        (maxMem / 6).coerceIn(16 * 1024 * 1024, 48 * 1024 * 1024)
+        val maxMem = Runtime.getRuntime().maxMemory()
+        (maxMem / 6L).coerceIn(16L * 1024L * 1024L, 48L * 1024L * 1024L).toInt()
     }
 
     private val cache = object : LruCache<Int, Bitmap>(maxCacheBytes) {
@@ -99,10 +99,10 @@ class PdfPageRenderer private constructor(
     private fun trimWhiteMargins(src: Bitmap): Bitmap {
         val w = src.width
         val h = src.height
-        val pixels = IntArray(w * h)
-        src.getPixels(pixels, 0, w, 0, 0, w, h)
+        // Scan row-by-row with a tiny single-row buffer (~8 KB) to avoid multi-MB OOM spikes
+        val rowPixels = IntArray(w)
 
-        val step = 6
+        val step = 8
         var minX = w
         var minY = h
         var maxX = -1
@@ -110,10 +110,10 @@ class PdfPageRenderer private constructor(
 
         var y = 0
         while (y < h) {
-            val rowOffset = y * w
+            src.getPixels(rowPixels, 0, w, 0, y, w, 1)
             var x = 0
             while (x < w) {
-                val c = pixels[rowOffset + x]
+                val c = rowPixels[x]
                 val r = (c shr 16) and 0xFF
                 val g = (c shr 8) and 0xFF
                 val b = c and 0xFF

@@ -22,6 +22,27 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Cache signing keystore fallback
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: lumepdf-debug-keystore-v1
+
+      - name: Decode release keystore if configured
+        env:
+          KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          STORE_PASS: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > release.keystore
+            echo "RELEASE_STORE_FILE=$GITHUB_WORKSPACE/release.keystore" >> "$GITHUB_ENV"
+            echo "RELEASE_STORE_PASSWORD=$STORE_PASS" >> "$GITHUB_ENV"
+            echo "RELEASE_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+            echo "RELEASE_KEY_PASSWORD=$KEY_PASS" >> "$GITHUB_ENV"
+          fi
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:

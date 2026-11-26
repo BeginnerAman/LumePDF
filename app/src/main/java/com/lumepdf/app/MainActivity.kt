@@ -37,6 +37,7 @@ import com.lumepdf.app.model.SortOrder
 import com.lumepdf.app.ui.CategoryChipAdapter
 import com.lumepdf.app.ui.GlassDialogs
 import com.lumepdf.app.ui.PdfListAdapter
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
@@ -58,7 +59,8 @@ class MainActivity : AppCompatActivity() {
 
     private var isMultiSelectMode: Boolean = false
     private val selectedKeys = LinkedHashSet<String>()
-    private var isScanning: Boolean = false
+    private var scanJob: Job? = null
+    private var isUserScanning: Boolean = false
     private var refreshAnimator: ObjectAnimator? = null
 
     private val backCallback = object : OnBackPressedCallback(false) {
@@ -169,8 +171,11 @@ class MainActivity : AppCompatActivity() {
                                 exitMultiSelect()
                                 renderList()
                             } else {
-                                Toast.makeText(this, "Category already exists", Toast.LENGTH_SHORT)
-                                    .show()
+                                Toast.makeText(
+                                    this,
+                                    "Category name is reserved or already exists",
+                                    Toast.LENGTH_SHORT
+                                ).show()
                             }
                         }
                     }
@@ -465,10 +470,12 @@ class MainActivity : AppCompatActivity() {
         silent: Boolean = false,
         userInitiated: Boolean = false
     ) {
-        if (isScanning) return
-        isScanning = true
-
+        if (silent && scanJob?.isActive == true) return
+        if (userInitiated && isUserScanning) return
         if (!silent) {
+            scanJob?.cancel()
+            stopRefreshSpin()
+            isUserScanning = userInitiated
             binding.tvSubtitle.text = getString(R.string.subtitle_scanning)
             if (allPdfs.isEmpty()) {
                 binding.progressScan.visibility = View.VISIBLE
@@ -481,33 +488,38 @@ class MainActivity : AppCompatActivity() {
         val previousKeys = allPdfs.map { it.key }.toSet()
         val startMs = System.currentTimeMillis()
 
-        lifecycleScope.launch {
-            val scanned = PdfScanner.scanAllPdfs(this@MainActivity, store, fullWalk = fullWalk)
-            if (userInitiated) {
-                val elapsed = System.currentTimeMillis() - startMs
-                if (elapsed < 500L) {
-                    delay(500L - elapsed)
+        scanJob = lifecycleScope.launch {
+            try {
+                val scanned = PdfScanner.scanAllPdfs(this@MainActivity, store, fullWalk = fullWalk)
+                if (userInitiated) {
+                    val elapsed = System.currentTimeMillis() - startMs
+                    if (elapsed < 500L) {
+                        delay(500L - elapsed)
+                    }
+                    stopRefreshSpin()
                 }
-                stopRefreshSpin()
-            }
-            isScanning = false
-            binding.progressScan.visibility = View.GONE
+                binding.progressScan.visibility = View.GONE
 
-            if (!silent || scanned != allPdfs) {
-                allPdfs = scanned
-                renderList()
-            }
-
-            if (userInitiated) {
-                val newKeys = scanned.map { it.key }.toSet()
-                val added = (newKeys - previousKeys).size
-                val removed = (previousKeys - newKeys).size
-                val msg = when {
-                    added > 0 -> "Found $added new PDF${if (added == 1) "" else "s"}"
-                    removed > 0 -> "Library updated (${scanned.size} PDFs)"
-                    else -> "Up to date • ${scanned.size} PDF${if (scanned.size == 1) "" else "s"}"
+                if (!silent || scanned != allPdfs) {
+                    allPdfs = scanned
+                    renderList()
                 }
-                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
+
+                if (userInitiated) {
+                    val newKeys = scanned.map { it.key }.toSet()
+                    val added = (newKeys - previousKeys).size
+                    val removed = (previousKeys - newKeys).size
+                    val msg = when {
+                        added > 0 -> "Found $added new PDF${if (added == 1) "" else "s"}"
+                        removed > 0 -> "Library updated (${scanned.size} PDFs)"
+                        else -> "Up to date • ${scanned.size} PDF${if (scanned.size == 1) "" else "s"}"
+                    }
+                    Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
+                }
+            } finally {
+                if (userInitiated) {
+                    isUserScanning = false
+                }
             }
         }
     }
@@ -529,6 +541,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        scanJob?.cancel()
         refreshAnimator?.cancel()
         refreshAnimator = null
         super.onDestroy()

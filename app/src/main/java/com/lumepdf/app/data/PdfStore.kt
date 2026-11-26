@@ -39,6 +39,12 @@ class PdfStore(context: Context) {
     fun addCategory(name: String): Boolean {
         val clean = name.trim()
         if (clean.isEmpty()) return false
+        if (clean.equals("All", ignoreCase = true) ||
+            clean.equals("Other", ignoreCase = true) ||
+            clean.equals("Uncategorized", ignoreCase = true)
+        ) {
+            return false
+        }
         val current = getCategories().toMutableList()
         if (current.any { it.equals(clean, ignoreCase = true) }) return false
         current.add(clean)
