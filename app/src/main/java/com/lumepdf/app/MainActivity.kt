@@ -133,6 +133,9 @@ class MainActivity : AppCompatActivity() {
         val hasFullAccess = PdfScanner.hasFullAutoScanPermission(this)
         if (hasFullAccess != store.getLastScanHadFullAccess()) {
             scanLibrary(fullWalk = true)
+        } else if (allPdfs.isNotEmpty()) {
+            // Refresh reading progress indicators after returning from PdfReaderActivity
+            renderList()
         }
     }
 
@@ -525,6 +528,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         currentVisiblePdfs = sorted
+        val lastPages = store.getLastPages()
+        val pageCounts = store.getPageCounts()
 
         val rows: List<PdfListRow> = if (dateGrouped &&
             (sortOrder == SortOrder.DATE_DESC || sortOrder == SortOrder.DATE_ASC)
@@ -538,12 +543,26 @@ class MainActivity : AppCompatActivity() {
                 grouped.forEach { (label, items) ->
                     add(PdfListRow.DateHeader(label, items.size))
                     items.forEach { item ->
-                        add(PdfListRow.PdfEntry(item, categoryMap[item.key]))
+                        add(
+                            PdfListRow.PdfEntry(
+                                item = item,
+                                category = categoryMap[item.key],
+                                currentPage = lastPages[item.key] ?: 0,
+                                totalPages = pageCounts[item.key] ?: 0
+                            )
+                        )
                     }
                 }
             }
         } else {
-            sorted.map { item -> PdfListRow.PdfEntry(item, categoryMap[item.key]) }
+            sorted.map { item ->
+                PdfListRow.PdfEntry(
+                    item = item,
+                    category = categoryMap[item.key],
+                    currentPage = lastPages[item.key] ?: 0,
+                    totalPages = pageCounts[item.key] ?: 0
+                )
+            }
         }
 
         pdfAdapter.submitList(rows)
@@ -609,9 +628,30 @@ class MainActivity : AppCompatActivity() {
             currentCategory = currentCategory,
             onOpen = { openReader(item) },
             onCategorize = { showMoveCategory(item, currentCategory) },
+            onRename = { showRenamePdf(item) },
             onShare = { sharePdf(item) },
             onDelete = { confirmDeletePdf(item) }
         )
+    }
+
+    private fun showRenamePdf(item: PdfItem) {
+        GlassDialogs.showRenamePdfDialog(this, item.displayName) { newName ->
+            lifecycleScope.launch {
+                val res = PdfScanner.renamePdf(this@MainActivity, item, newName, store)
+                res.onSuccess { updated ->
+                    allPdfs = allPdfs.map { if (it.key == item.key) updated else it }
+                    store.saveCachedPdfs(allPdfs)
+                    renderList()
+                    Toast.makeText(this@MainActivity, "Renamed", Toast.LENGTH_SHORT).show()
+                }.onFailure { err ->
+                    Toast.makeText(
+                        this@MainActivity,
+                        err.message ?: "Unable to rename this PDF",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
     }
 
     private fun showMoveCategory(item: PdfItem, currentCategory: String?) {

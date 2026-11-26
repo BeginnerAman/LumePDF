@@ -73,6 +73,16 @@
                 android:textColor="@color/text_secondary"
                 android:textSize="12sp" />
         </LinearLayout>
+
+        <ProgressBar
+            android:id="@+id/progressReading"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="3dp"
+            android:layout_marginTop="6dp"
+            android:max="100"
+            android:progressDrawable="@drawable/bg_reading_progress"
+            android:visibility="gone" />
     </LinearLayout>
 
     <ImageButton

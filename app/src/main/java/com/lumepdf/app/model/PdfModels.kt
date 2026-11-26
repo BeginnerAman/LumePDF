@@ -44,7 +44,12 @@ sealed class CategoryChip {
 
 sealed class PdfListRow {
     data class DateHeader(val label: String, val count: Int) : PdfListRow()
-    data class PdfEntry(val item: PdfItem, val category: String?) : PdfListRow()
+    data class PdfEntry(
+        val item: PdfItem,
+        val category: String?,
+        val currentPage: Int = 0,
+        val totalPages: Int = 0
+    ) : PdfListRow()
 }
 
 object PdfFormatters {

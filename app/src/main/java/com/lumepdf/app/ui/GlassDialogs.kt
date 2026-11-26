@@ -109,6 +109,7 @@ object GlassDialogs {
         currentCategory: String?,
         onOpen: () -> Unit,
         onCategorize: () -> Unit,
+        onRename: () -> Unit,
         onShare: () -> Unit,
         onDelete: () -> Unit
     ) {
@@ -125,6 +126,10 @@ object GlassDialogs {
         addOptionRow(context, binding.listContainer, "Move to Category") {
             dialog.dismiss()
             onCategorize()
+        }
+        addOptionRow(context, binding.listContainer, "Rename PDF") {
+            dialog.dismiss()
+            onRename()
         }
         addOptionRow(context, binding.listContainer, "Share PDF") {
             dialog.dismiss()
@@ -332,22 +337,59 @@ object GlassDialogs {
         dialog.show()
     }
 
-    fun showNewCategoryDialog(
+    private fun showInputDialog(
         context: Context,
-        onCreate: (String) -> Unit
+        title: String,
+        hint: String,
+        initialValue: String = "",
+        maxLen: Int = 24,
+        onSubmit: (String) -> Unit
     ) {
         val binding = DialogGlassInputBinding.inflate(LayoutInflater.from(context))
         val dialog = createGlassDialog(context, binding.root)
-        binding.tvInputTitle.text = "New Category"
+        binding.tvInputTitle.text = title
+        binding.etInput.hint = hint
+        binding.etInput.filters = arrayOf(android.text.InputFilter.LengthFilter(maxLen))
+        if (initialValue.isNotEmpty()) {
+            binding.etInput.setText(initialValue)
+            binding.etInput.setSelection(initialValue.length)
+        }
         binding.btnInputCancel.setOnClickListener { dialog.dismiss() }
         binding.btnInputSave.setOnClickListener {
             val text = binding.etInput.text?.toString()?.trim().orEmpty()
             if (text.isNotEmpty()) {
                 dialog.dismiss()
-                onCreate(text)
+                onSubmit(text)
             }
         }
         dialog.show()
+    }
+
+    fun showNewCategoryDialog(
+        context: Context,
+        onCreate: (String) -> Unit
+    ) {
+        showInputDialog(
+            context = context,
+            title = "New Category",
+            hint = "Category name",
+            onSubmit = onCreate
+        )
+    }
+
+    fun showRenamePdfDialog(
+        context: Context,
+        currentName: String,
+        onRename: (String) -> Unit
+    ) {
+        showInputDialog(
+            context = context,
+            title = "Rename PDF",
+            hint = "File name",
+            initialValue = currentName,
+            maxLen = 80,
+            onSubmit = onRename
+        )
     }
 
     fun showDeleteConfirmDialog(

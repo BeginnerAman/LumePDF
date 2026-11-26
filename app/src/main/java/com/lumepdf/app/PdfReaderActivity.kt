@@ -8,6 +8,7 @@ import android.provider.OpenableColumns
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.SeekBar
 import android.widget.Toast
@@ -43,6 +44,7 @@ class PdfReaderActivity : AppCompatActivity() {
     private var barsVisible: Boolean = true
     private var nightMode: Boolean = false
     private var cropMargins: Boolean = false
+    private var keepScreenOn: Boolean = true
     private var autoHideJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -54,7 +56,9 @@ class PdfReaderActivity : AppCompatActivity() {
         store = PdfStore(this)
         nightMode = store.isReaderNightMode()
         cropMargins = store.isReaderCropMargins()
+        keepScreenOn = store.isKeepScreenOn()
         applyNightBackground()
+        applyKeepScreenOn()
         updateToggleStates()
         applyOrientationBarLayout(
             resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -75,6 +79,19 @@ class PdfReaderActivity : AppCompatActivity() {
         binding.tvReaderTitle.text = title
 
         binding.btnBack.setOnClickListener { finish() }
+
+        binding.btnScreenOnToggle.setOnClickListener {
+            keepScreenOn = !keepScreenOn
+            store.setKeepScreenOn(keepScreenOn)
+            applyKeepScreenOn()
+            updateToggleStates()
+            Toast.makeText(
+                this,
+                if (keepScreenOn) "Keep Screen On: On" else "Keep Screen On: Off",
+                Toast.LENGTH_SHORT
+            ).show()
+            scheduleAutoHide()
+        }
 
         binding.btnCropToggle.setOnClickListener {
             cropMargins = !cropMargins
@@ -155,9 +172,18 @@ class PdfReaderActivity : AppCompatActivity() {
         binding.bottomBar.layoutParams = bottomLp
     }
 
+    private fun applyKeepScreenOn() {
+        if (keepScreenOn) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
     private fun updateToggleStates() {
         val activeColor = ContextCompat.getColor(this, R.color.accent_blue)
         val normalColor = ContextCompat.getColor(this, R.color.text_primary)
+        binding.btnScreenOnToggle.setColorFilter(if (keepScreenOn) activeColor else normalColor)
         binding.btnCropToggle.setColorFilter(if (cropMargins) activeColor else normalColor)
         binding.btnNightToggle.setColorFilter(if (nightMode) activeColor else normalColor)
     }
@@ -182,6 +208,9 @@ class PdfReaderActivity : AppCompatActivity() {
                 if (totalPages <= 0) {
                     showError("This PDF has no pages.")
                     return@onSuccess
+                }
+                if (pdfKey.isNotEmpty()) {
+                    store.setPageCount(pdfKey, totalPages)
                 }
 
                 val widthPx = calculatePageWidthPx()

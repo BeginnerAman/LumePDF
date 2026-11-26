@@ -97,6 +97,42 @@ class PdfStore(context: Context) {
         if (pages.remove(pdfKey) != null) {
             saveLastPages(pages)
         }
+        val counts = getPageCounts().toMutableMap()
+        if (counts.remove(pdfKey) != null) {
+            savePageCounts(counts)
+        }
+    }
+
+    fun migratePdfKey(oldKey: String, newKey: String) {
+        if (oldKey == newKey) return
+        val catMap = getCategoryMap().toMutableMap()
+        val oldCat = catMap.remove(oldKey)
+        if (oldCat != null) {
+            catMap[newKey] = oldCat
+            saveCategoryMap(catMap)
+        }
+
+        val pages = getLastPages().toMutableMap()
+        val oldPage = pages.remove(oldKey)
+        if (oldPage != null) {
+            pages[newKey] = oldPage
+            saveLastPages(pages)
+        }
+
+        val counts = getPageCounts().toMutableMap()
+        val oldCount = counts.remove(oldKey)
+        if (oldCount != null) {
+            counts[newKey] = oldCount
+            savePageCounts(counts)
+        }
+
+        val imported = getImportedUris()
+        if (imported.contains(oldKey)) {
+            val updated = imported.toMutableSet()
+            updated.remove(oldKey)
+            updated.add(newKey)
+            prefs.edit().putStringSet(KEY_IMPORTED_URIS, updated).apply()
+        }
     }
 
     private fun saveCategoryMap(map: Map<String, String>) {
@@ -147,7 +183,7 @@ class PdfStore(context: Context) {
         saveLastPages(map)
     }
 
-    private fun getLastPages(): Map<String, Int> {
+    fun getLastPages(): Map<String, Int> {
         val raw = prefs.getString(KEY_LAST_PAGES, null) ?: return emptyMap()
         return runCatching {
             val obj = JSONObject(raw)
@@ -167,6 +203,34 @@ class PdfStore(context: Context) {
         prefs.edit().putString(KEY_LAST_PAGES, obj.toString()).apply()
     }
 
+    fun setPageCount(pdfKey: String, totalPages: Int) {
+        if (totalPages <= 0) return
+        val map = getPageCounts().toMutableMap()
+        if (map[pdfKey] == totalPages) return
+        map[pdfKey] = totalPages
+        savePageCounts(map)
+    }
+
+    fun getPageCounts(): Map<String, Int> {
+        val raw = prefs.getString(KEY_PAGE_COUNTS, null) ?: return emptyMap()
+        return runCatching {
+            val obj = JSONObject(raw)
+            buildMap {
+                val keys = obj.keys()
+                while (keys.hasNext()) {
+                    val k = keys.next()
+                    put(k, obj.optInt(k, 0))
+                }
+            }
+        }.getOrElse { emptyMap() }
+    }
+
+    private fun savePageCounts(map: Map<String, Int>) {
+        val obj = JSONObject()
+        map.forEach { (k, v) -> obj.put(k, v) }
+        prefs.edit().putString(KEY_PAGE_COUNTS, obj.toString()).apply()
+    }
+
     fun isReaderNightMode(): Boolean = prefs.getBoolean(KEY_READER_NIGHT, false)
 
     fun setReaderNightMode(enabled: Boolean) {
@@ -177,6 +241,12 @@ class PdfStore(context: Context) {
 
     fun setReaderCropMargins(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_READER_CROP, enabled).apply()
+    }
+
+    fun isKeepScreenOn(): Boolean = prefs.getBoolean(KEY_KEEP_SCREEN_ON, true)
+
+    fun setKeepScreenOn(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_KEEP_SCREEN_ON, enabled).apply()
     }
 
     fun getLastScanHadFullAccess(): Boolean = prefs.getBoolean(KEY_LAST_FULL_ACCESS, false)
@@ -245,8 +315,10 @@ class PdfStore(context: Context) {
         private const val KEY_SORT_ORDER = "sort_order"
         private const val KEY_DATE_GROUPED = "date_grouped"
         private const val KEY_LAST_PAGES = "last_pages"
+        private const val KEY_PAGE_COUNTS = "page_counts"
         private const val KEY_READER_NIGHT = "reader_night"
         private const val KEY_READER_CROP = "reader_crop"
+        private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
         private const val KEY_CACHED_PDFS = "cached_pdfs"
         private const val KEY_LAST_FULL_ACCESS = "last_full_access"
     }

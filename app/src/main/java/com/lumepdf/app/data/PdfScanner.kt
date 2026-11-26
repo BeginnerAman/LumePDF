@@ -268,4 +268,68 @@ object PdfScanner {
             }
             deleted
         }
+
+    suspend fun renamePdf(
+        context: Context,
+        item: PdfItem,
+        newRawName: String,
+        store: PdfStore
+    ): Result<PdfItem> = withContext(Dispatchers.IO) {
+        runCatching {
+            val trimmed = newRawName.trim()
+                .removeSuffix(".pdf")
+                .removeSuffix(".PDF")
+                .trim()
+            require(trimmed.isNotEmpty()) { "Name cannot be empty" }
+            require(!trimmed.contains('/') && !trimmed.contains('\\')) { "Invalid characters in name" }
+
+            val newFileName = "$trimmed.pdf"
+            if (newFileName == item.name) return@runCatching item
+
+            val path = item.filePath
+            if (!path.isNullOrBlank()) {
+                val oldFile = File(path)
+                val parent = oldFile.parentFile ?: error("Parent folder unavailable")
+                val targetFile = File(parent, newFileName)
+                require(!targetFile.exists()) { "A PDF with this name already exists" }
+                check(oldFile.renameTo(targetFile)) { "Permission denied to rename this file" }
+
+                val canonical = runCatching { targetFile.canonicalPath }.getOrDefault(targetFile.absolutePath)
+                val newUri = runCatching {
+                    FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        targetFile
+                    )
+                }.getOrElse { Uri.fromFile(targetFile) }
+
+                MediaScannerConnection.scanFile(
+                    context,
+                    arrayOf(path, canonical),
+                    null,
+                    null
+                )
+                store.migratePdfKey(item.key, canonical)
+                item.copy(
+                    key = canonical,
+                    uri = newUri,
+                    filePath = canonical,
+                    name = newFileName
+                )
+            } else {
+                val renamedUri = DocumentsContract.renameDocument(
+                    context.contentResolver,
+                    item.uri,
+                    newFileName
+                ) ?: error("Rename not supported for this file location")
+                val newKey = renamedUri.toString()
+                store.migratePdfKey(item.key, newKey)
+                item.copy(
+                    key = newKey,
+                    uri = renamedUri,
+                    name = newFileName
+                )
+            }
+        }
+    }
 }

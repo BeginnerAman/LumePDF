@@ -87,7 +87,22 @@ class PdfListAdapter(
 
             val dateStr = PdfFormatters.formatShortDate(item.dateModifiedMillis)
             val sizeStr = PdfFormatters.formatSize(item.sizeBytes)
-            binding.tvPdfMeta.text = "$dateStr • $sizeStr"
+            val progressText = if (row.totalPages > 0) {
+                val pageNum = (row.currentPage + 1).coerceIn(1, row.totalPages)
+                " • Pg $pageNum/${row.totalPages}"
+            } else {
+                ""
+            }
+            binding.tvPdfMeta.text = "$dateStr • $sizeStr$progressText"
+
+            if (row.totalPages > 0) {
+                val pageNum = (row.currentPage + 1).coerceIn(1, row.totalPages)
+                val pct = ((pageNum * 100f) / row.totalPages).toInt().coerceIn(2, 100)
+                binding.progressReading.visibility = View.VISIBLE
+                binding.progressReading.progress = pct
+            } else {
+                binding.progressReading.visibility = View.GONE
+            }
 
             if (row.category.isNullOrBlank()) {
                 binding.tvCategoryBadge.visibility = View.GONE
