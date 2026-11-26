@@ -327,7 +327,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Build rows (date-grouped or flat)
-        val rows = if (dateGrouped &&
+        val rows: List<PdfListRow> = if (dateGrouped &&
             (sortOrder == SortOrder.DATE_DESC || sortOrder == SortOrder.DATE_ASC)
         ) {
             val grouped = LinkedHashMap<String, MutableList<PdfItem>>()
@@ -335,7 +335,7 @@ class MainActivity : AppCompatActivity() {
                 val label = PdfFormatters.dateSectionLabel(item.dateModifiedMillis)
                 grouped.getOrPut(label) { mutableListOf() }.add(item)
             }
-            buildList {
+            buildList<PdfListRow> {
                 grouped.forEach { (label, items) ->
                     add(PdfListRow.DateHeader(label, items.size))
                     items.forEach { item ->
