@@ -557,7 +557,7 @@ object GlassDialogs {
             initialValue = currentName,
             maxLen = 80,
             palette = palette,
-            onRename = onRename
+            onSubmit = onRename
         )
     }
 
