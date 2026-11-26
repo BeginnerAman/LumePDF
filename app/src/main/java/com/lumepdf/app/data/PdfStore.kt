@@ -2,6 +2,9 @@ package com.lumepdf.app.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.net.Uri
+import com.lumepdf.app.model.PdfItem
+import com.lumepdf.app.model.PdfSource
 import com.lumepdf.app.model.SortOrder
 import org.json.JSONArray
 import org.json.JSONObject
@@ -176,6 +179,64 @@ class PdfStore(context: Context) {
         prefs.edit().putBoolean(KEY_READER_CROP, enabled).apply()
     }
 
+    fun getLastScanHadFullAccess(): Boolean = prefs.getBoolean(KEY_LAST_FULL_ACCESS, false)
+
+    fun setLastScanHadFullAccess(granted: Boolean) {
+        prefs.edit().putBoolean(KEY_LAST_FULL_ACCESS, granted).apply()
+    }
+
+    fun hasCachedPdfs(): Boolean = prefs.contains(KEY_CACHED_PDFS)
+
+    fun getCachedPdfs(): List<PdfItem> {
+        val raw = prefs.getString(KEY_CACHED_PDFS, null) ?: return emptyList()
+        return runCatching {
+            val arr = JSONArray(raw)
+            buildList {
+                for (i in 0 until arr.length()) {
+                    val obj = arr.optJSONObject(i) ?: continue
+                    val key = obj.optString("k")
+                    val uriStr = obj.optString("u")
+                    val name = obj.optString("n")
+                    if (key.isEmpty() || uriStr.isEmpty() || name.isEmpty()) continue
+                    val path = obj.optString("p").takeIf { it.isNotEmpty() }
+                    val size = obj.optLong("s", 0L)
+                    val date = obj.optLong("d", 0L)
+                    val srcName = obj.optString("r", PdfSource.AUTO_SCANNED.name)
+                    val source = runCatching { PdfSource.valueOf(srcName) }
+                        .getOrDefault(PdfSource.AUTO_SCANNED)
+                    add(
+                        PdfItem(
+                            key = key,
+                            uri = Uri.parse(uriStr),
+                            filePath = path,
+                            name = name,
+                            sizeBytes = size,
+                            dateModifiedMillis = date,
+                            source = source
+                        )
+                    )
+                }
+            }
+        }.getOrElse { emptyList() }
+    }
+
+    fun saveCachedPdfs(items: List<PdfItem>) {
+        val arr = JSONArray()
+        items.forEach { item ->
+            val obj = JSONObject().apply {
+                put("k", item.key)
+                put("u", item.uri.toString())
+                put("p", item.filePath ?: "")
+                put("n", item.name)
+                put("s", item.sizeBytes)
+                put("d", item.dateModifiedMillis)
+                put("r", item.source.name)
+            }
+            arr.put(obj)
+        }
+        prefs.edit().putString(KEY_CACHED_PDFS, arr.toString()).apply()
+    }
+
     companion object {
         private const val PREFS_NAME = "lumepdf_store"
         private const val KEY_CATEGORIES = "categories"
@@ -186,5 +247,7 @@ class PdfStore(context: Context) {
         private const val KEY_LAST_PAGES = "last_pages"
         private const val KEY_READER_NIGHT = "reader_night"
         private const val KEY_READER_CROP = "reader_crop"
+        private const val KEY_CACHED_PDFS = "cached_pdfs"
+        private const val KEY_LAST_FULL_ACCESS = "last_full_access"
     }
 }

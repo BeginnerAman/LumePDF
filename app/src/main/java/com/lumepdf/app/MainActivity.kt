@@ -118,7 +118,7 @@ class MainActivity : AppCompatActivity() {
         updatePermissionBanner()
         updateSortAndDatePills()
         updateFloatingControls()
-        scanLibrary()
+        loadInitialLibrary()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -130,6 +130,10 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updatePermissionBanner()
+        val hasFullAccess = PdfScanner.hasFullAutoScanPermission(this)
+        if (hasFullAccess != store.getLastScanHadFullAccess()) {
+            scanLibrary(fullWalk = true)
+        }
     }
 
     private fun applyEdgeToEdgeInsets() {
@@ -432,15 +436,33 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun scanLibrary() {
-        binding.progressScan.visibility = if (allPdfs.isEmpty()) View.VISIBLE else View.GONE
-        binding.tvSubtitle.text = getString(R.string.subtitle_scanning)
+    private fun loadInitialLibrary() {
+        val cached = store.getCachedPdfs()
+        val permissionChanged =
+            PdfScanner.hasFullAutoScanPermission(this) != store.getLastScanHadFullAccess()
+
+        if (cached.isNotEmpty()) {
+            allPdfs = cached
+            renderList()
+            scanLibrary(fullWalk = permissionChanged, silent = true)
+        } else {
+            scanLibrary(fullWalk = true, silent = false)
+        }
+    }
+
+    private fun scanLibrary(fullWalk: Boolean = true, silent: Boolean = false) {
+        if (!silent && allPdfs.isEmpty()) {
+            binding.progressScan.visibility = View.VISIBLE
+            binding.tvSubtitle.text = getString(R.string.subtitle_scanning)
+        }
 
         lifecycleScope.launch {
-            val scanned = PdfScanner.scanAllPdfs(this@MainActivity, store)
-            allPdfs = scanned
+            val scanned = PdfScanner.scanAllPdfs(this@MainActivity, store, fullWalk = fullWalk)
             binding.progressScan.visibility = View.GONE
-            renderList()
+            if (!silent || scanned != allPdfs) {
+                allPdfs = scanned
+                renderList()
+            }
         }
     }
 
@@ -663,6 +685,7 @@ class MainActivity : AppCompatActivity() {
                 val ok = PdfScanner.deletePdf(this@MainActivity, item, store)
                 if (ok) {
                     allPdfs = allPdfs.filterNot { it.key == item.key }
+                    store.saveCachedPdfs(allPdfs)
                     renderList()
                     Toast.makeText(this@MainActivity, "Removed", Toast.LENGTH_SHORT).show()
                 } else {
@@ -693,6 +716,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 allPdfs = allPdfs.filterNot { deletedKeys.contains(it.key) }
+                store.saveCachedPdfs(allPdfs)
                 exitMultiSelect()
                 renderList()
                 val msg = if (deletedKeys.size == itemsToDelete.size) {

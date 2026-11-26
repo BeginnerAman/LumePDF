@@ -32,52 +32,73 @@ object PdfScanner {
         }
     }
 
-    suspend fun scanAllPdfs(context: Context, store: PdfStore): List<PdfItem> =
-        withContext(Dispatchers.IO) {
-            val byPath = LinkedHashMap<String, PdfItem>()
-            val importedOnly = mutableListOf<PdfItem>()
+    suspend fun scanAllPdfs(
+        context: Context,
+        store: PdfStore,
+        fullWalk: Boolean = true
+    ): List<PdfItem> = withContext(Dispatchers.IO) {
+        val byPath = LinkedHashMap<String, PdfItem>()
+        val importedOnly = mutableListOf<PdfItem>()
+        val hasFullAccess = hasFullAutoScanPermission(context)
 
-            // 1. Direct fast filesystem scan when All Files Access (API 30+) or storage permission (<= 29) is granted
-            if (hasFullAutoScanPermission(context)) {
-                val roots = buildList {
-                    @Suppress("DEPRECATION")
-                    add(Environment.getExternalStorageDirectory())
+        if (fullWalk) {
+            // Full directory walk (first launch, permission change, or manual refresh)
+            if (hasFullAccess) {
+                @Suppress("DEPRECATION")
+                val root = Environment.getExternalStorageDirectory()
+                if (root != null && root.exists() && root.canRead()) {
+                    walkDirectoryForPdfs(context, root, byPath)
                 }
-                roots.forEach { root ->
-                    if (root != null && root.exists() && root.canRead()) {
-                        walkDirectoryForPdfs(context, root, byPath)
+            }
+        } else {
+            // Fast cache-first sync: validate cached file-backed entries without walking entire storage
+            val cached = store.getCachedPdfs()
+            for (item in cached) {
+                if (item.source != PdfSource.AUTO_SCANNED) continue
+                val path = item.filePath
+                if (!path.isNullOrBlank()) {
+                    val file = File(path)
+                    if (file.exists() && file.isFile) {
+                        byPath[item.key] = item.copy(
+                            sizeBytes = file.length(),
+                            dateModifiedMillis = file.lastModified()
+                        )
                     }
                 }
             }
-
-            // 2. MediaStore query (finds PDFs in Downloads/Documents even without All Files Access on many devices)
-            scanMediaStore(context, byPath)
-
-            // 3. Manually imported SAF URIs
-            val validUris = store.getImportedUris().toMutableSet()
-            val staleUris = mutableListOf<String>()
-            for (uriStr in validUris) {
-                val uri = runCatching { Uri.parse(uriStr) }.getOrNull()
-                if (uri == null) {
-                    staleUris.add(uriStr)
-                    continue
-                }
-                val item = resolveSafPdf(context, uri)
-                if (item == null) {
-                    staleUris.add(uriStr)
-                } else {
-                    val alreadyPresent = byPath.values.any {
-                        it.name == item.name && it.sizeBytes == item.sizeBytes
-                    }
-                    if (!alreadyPresent) {
-                        importedOnly.add(item)
-                    }
-                }
-            }
-            staleUris.forEach { store.removeImportedUri(it) }
-
-            (byPath.values + importedOnly).toList()
         }
+
+        // Fast MediaStore query catches newly downloaded/received PDFs
+        scanMediaStore(context, byPath)
+
+        // Manually imported SAF URIs
+        val validUris = store.getImportedUris().toMutableSet()
+        val staleUris = mutableListOf<String>()
+        for (uriStr in validUris) {
+            val uri = runCatching { Uri.parse(uriStr) }.getOrNull()
+            if (uri == null) {
+                staleUris.add(uriStr)
+                continue
+            }
+            val item = resolveSafPdf(context, uri)
+            if (item == null) {
+                staleUris.add(uriStr)
+            } else {
+                val alreadyPresent = byPath.values.any {
+                    it.name == item.name && it.sizeBytes == item.sizeBytes
+                }
+                if (!alreadyPresent) {
+                    importedOnly.add(item)
+                }
+            }
+        }
+        staleUris.forEach { store.removeImportedUri(it) }
+
+        val result = (byPath.values + importedOnly).toList()
+        store.saveCachedPdfs(result)
+        store.setLastScanHadFullAccess(hasFullAccess)
+        result
+    }
 
     private fun walkDirectoryForPdfs(
         context: Context,
@@ -94,7 +115,6 @@ object PdfScanner {
                 val name = child.name
                 if (name.startsWith(".")) continue
                 if (child.isDirectory) {
-                    // Skip Android/data & Android/obb for fast scan and scoped storage rules
                     if (name.equals("Android", ignoreCase = true) &&
                         child.parentFile?.absolutePath == Environment.getExternalStorageDirectory().absolutePath
                     ) {
@@ -220,7 +240,6 @@ object PdfScanner {
     suspend fun deletePdf(context: Context, item: PdfItem, store: PdfStore): Boolean =
         withContext(Dispatchers.IO) {
             if (item.source == PdfSource.IMPORTED) {
-                // Attempt document deletion if supported, and always remove from LumePDF library
                 runCatching {
                     DocumentsContract.deleteDocument(context.contentResolver, item.uri)
                 }

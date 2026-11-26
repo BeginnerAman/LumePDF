@@ -43,7 +43,6 @@
                 android:clickable="true"
                 android:focusable="true"
                 android:fontFamily="sans-serif-medium"
-                android:foreground="?attr/selectableItemBackgroundBorderless"
                 android:gravity="center"
                 android:paddingHorizontal="13dp"
                 android:text="@string/select_label"
@@ -56,7 +55,6 @@
                 android:layout_height="36dp"
                 android:background="@drawable/bg_glass_pill"
                 android:contentDescription="Refresh PDFs"
-                android:foreground="?attr/selectableItemBackgroundBorderless"
                 android:padding="8dp"
                 android:scaleType="centerInside"
                 android:src="@drawable/ic_refresh" />
@@ -92,7 +90,6 @@
                 android:background="@drawable/bg_glass_pill"
                 android:clickable="true"
                 android:focusable="true"
-                android:foreground="?attr/selectableItemBackgroundBorderless"
                 android:gravity="center"
                 android:orientation="horizontal"
                 android:paddingHorizontal="11dp">
@@ -123,7 +120,6 @@
                 android:background="@drawable/bg_glass_pill"
                 android:clickable="true"
                 android:focusable="true"
-                android:foreground="?attr/selectableItemBackgroundBorderless"
                 android:gravity="center"
                 android:orientation="horizontal"
                 android:paddingHorizontal="11dp">
