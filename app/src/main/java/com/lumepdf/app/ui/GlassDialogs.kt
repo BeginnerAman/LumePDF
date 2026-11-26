@@ -228,8 +228,23 @@ object GlassDialogs {
         }
 
         class PickVH(val itemBinding: ItemPickPdfBinding) :
-            RecyclerView.ViewHolder(itemBinding.root) {
-            fun bind(pdf: PdfItem) {
+            RecyclerView.ViewHolder(itemBinding.root)
+
+        val pickAdapter = object : RecyclerView.Adapter<PickVH>() {
+            override fun getItemCount(): Int = filtered.size
+
+            override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PickVH {
+                val itemBinding = ItemPickPdfBinding.inflate(
+                    LayoutInflater.from(parent.context),
+                    parent,
+                    false
+                )
+                return PickVH(itemBinding)
+            }
+
+            override fun onBindViewHolder(holder: PickVH, position: Int) {
+                val pdf = filtered[position]
+                val itemBinding = holder.itemBinding
                 itemBinding.tvPickName.text = pdf.displayName
                 val existingCat = categoryMap[pdf.key]
                 val catLabel = existingCat ?: "Other"
@@ -251,27 +266,10 @@ object GlassDialogs {
                     } else {
                         selected.add(pdf.key)
                     }
-                    val pos = bindingAdapterPosition
+                    val pos = holder.bindingAdapterPosition
                     if (pos != RecyclerView.NO_POSITION) notifyItemChanged(pos)
                     updateLabels()
                 }
-            }
-        }
-
-        val pickAdapter = object : RecyclerView.Adapter<PickVH>() {
-            override fun getItemCount(): Int = filtered.size
-
-            override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PickVH {
-                val itemBinding = ItemPickPdfBinding.inflate(
-                    LayoutInflater.from(parent.context),
-                    parent,
-                    false
-                )
-                return PickVH(itemBinding)
-            }
-
-            override fun onBindViewHolder(holder: PickVH, position: Int) {
-                holder.bind(filtered[position])
             }
         }
 

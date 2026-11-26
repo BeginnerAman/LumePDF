@@ -15,20 +15,16 @@ android {
         versionName = "1.5.0"
     }
 
+    val releaseKeystorePath = System.getenv("RELEASE_STORE_FILE")
+    val hasReleaseKeystore = !releaseKeystorePath.isNullOrBlank() && file(releaseKeystorePath).exists()
+
     signingConfigs {
-        create("release") {
-            val keystorePath = System.getenv("RELEASE_STORE_FILE")
-            if (!keystorePath.isNullOrBlank() && file(keystorePath).exists()) {
-                storeFile = file(keystorePath)
+        if (hasReleaseKeystore) {
+            create("release") {
+                storeFile = file(releaseKeystorePath!!)
                 storePassword = System.getenv("RELEASE_STORE_PASSWORD")
                 keyAlias = System.getenv("RELEASE_KEY_ALIAS")
                 keyPassword = System.getenv("RELEASE_KEY_PASSWORD")
-            } else {
-                val debugCfg = getByName("debug")
-                storeFile = debugCfg.storeFile
-                storePassword = debugCfg.storePassword
-                keyAlias = debugCfg.keyAlias
-                keyPassword = debugCfg.keyPassword
             }
         }
     }
@@ -37,7 +33,11 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = if (hasReleaseKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

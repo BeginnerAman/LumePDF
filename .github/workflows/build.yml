@@ -25,8 +25,10 @@ jobs:
       - name: Cache signing keystore fallback
         uses: actions/cache@v4
         with:
-          path: ~/.android/debug.keystore
-          key: lumepdf-debug-keystore-v1
+          path: |
+            ~/.android/debug.keystore
+            ~/.config/.android/debug.keystore
+          key: lumepdf-debug-keystore-v2
 
       - name: Decode release keystore if configured
         env:
