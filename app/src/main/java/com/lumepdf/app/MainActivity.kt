@@ -1,6 +1,7 @@
 package com.lumepdf.app
 
 import android.Manifest
+import android.animation.ObjectAnimator
 import android.content.Intent
 import android.content.res.Configuration
 import android.net.Uri
@@ -10,6 +11,7 @@ import android.provider.Settings
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
+import android.view.animation.LinearInterpolator
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
@@ -35,6 +37,7 @@ import com.lumepdf.app.model.SortOrder
 import com.lumepdf.app.ui.CategoryChipAdapter
 import com.lumepdf.app.ui.GlassDialogs
 import com.lumepdf.app.ui.PdfListAdapter
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -55,6 +58,8 @@ class MainActivity : AppCompatActivity() {
 
     private var isMultiSelectMode: Boolean = false
     private val selectedKeys = LinkedHashSet<String>()
+    private var isScanning: Boolean = false
+    private var refreshAnimator: ObjectAnimator? = null
 
     private val backCallback = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() {
@@ -229,7 +234,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupControls() {
-        binding.btnRefresh.setOnClickListener { scanLibrary() }
+        binding.btnRefresh.setOnClickListener {
+            scanLibrary(fullWalk = true, silent = false, userInitiated = true)
+        }
         binding.btnGrantAccess.setOnClickListener { requestAutoScanPermission() }
 
         binding.fabAddPdf.setOnClickListener { handlePrimaryAddClick() }
@@ -453,20 +460,78 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun scanLibrary(fullWalk: Boolean = true, silent: Boolean = false) {
-        if (!silent && allPdfs.isEmpty()) {
-            binding.progressScan.visibility = View.VISIBLE
+    private fun scanLibrary(
+        fullWalk: Boolean = true,
+        silent: Boolean = false,
+        userInitiated: Boolean = false
+    ) {
+        if (isScanning) return
+        isScanning = true
+
+        if (!silent) {
             binding.tvSubtitle.text = getString(R.string.subtitle_scanning)
+            if (allPdfs.isEmpty()) {
+                binding.progressScan.visibility = View.VISIBLE
+            }
+            if (userInitiated) {
+                startRefreshSpin()
+            }
         }
+
+        val previousKeys = allPdfs.map { it.key }.toSet()
+        val startMs = System.currentTimeMillis()
 
         lifecycleScope.launch {
             val scanned = PdfScanner.scanAllPdfs(this@MainActivity, store, fullWalk = fullWalk)
+            if (userInitiated) {
+                val elapsed = System.currentTimeMillis() - startMs
+                if (elapsed < 500L) {
+                    delay(500L - elapsed)
+                }
+                stopRefreshSpin()
+            }
+            isScanning = false
             binding.progressScan.visibility = View.GONE
+
             if (!silent || scanned != allPdfs) {
                 allPdfs = scanned
                 renderList()
             }
+
+            if (userInitiated) {
+                val newKeys = scanned.map { it.key }.toSet()
+                val added = (newKeys - previousKeys).size
+                val removed = (previousKeys - newKeys).size
+                val msg = when {
+                    added > 0 -> "Found $added new PDF${if (added == 1) "" else "s"}"
+                    removed > 0 -> "Library updated (${scanned.size} PDFs)"
+                    else -> "Up to date • ${scanned.size} PDF${if (scanned.size == 1) "" else "s"}"
+                }
+                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
+            }
         }
+    }
+
+    private fun startRefreshSpin() {
+        refreshAnimator?.cancel()
+        refreshAnimator = ObjectAnimator.ofFloat(binding.btnRefresh, View.ROTATION, 0f, 360f).apply {
+            duration = 600L
+            repeatCount = ObjectAnimator.INFINITE
+            interpolator = LinearInterpolator()
+            start()
+        }
+    }
+
+    private fun stopRefreshSpin() {
+        refreshAnimator?.cancel()
+        refreshAnimator = null
+        binding.btnRefresh.rotation = 0f
+    }
+
+    override fun onDestroy() {
+        refreshAnimator?.cancel()
+        refreshAnimator = null
+        super.onDestroy()
     }
 
     private fun renderList() {
