@@ -6,6 +6,7 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.lumepdf.app.R
 import com.lumepdf.app.databinding.ItemDateHeaderBinding
 import com.lumepdf.app.databinding.ItemPdfBinding
 import com.lumepdf.app.model.PdfFormatters
@@ -14,8 +15,26 @@ import com.lumepdf.app.model.PdfListRow
 
 class PdfListAdapter(
     private val onOpenPdf: (PdfItem) -> Unit,
-    private val onMoreClick: (PdfItem) -> Unit
+    private val onMoreClick: (PdfItem) -> Unit,
+    private val onToggleSelect: (PdfItem) -> Unit,
+    private val onEnterSelection: (PdfItem) -> Unit
 ) : ListAdapter<PdfListRow, RecyclerView.ViewHolder>(DiffCallback) {
+
+    var selectionMode: Boolean = false
+        private set
+
+    private var selectedKeys: Set<String> = emptySet()
+
+    fun updateSelectionState(enabled: Boolean, keys: Set<String>) {
+        val modeChanged = selectionMode != enabled
+        selectionMode = enabled
+        selectedKeys = keys
+        if (modeChanged) {
+            notifyDataSetChanged()
+        } else {
+            notifyItemRangeChanged(0, itemCount, PAYLOAD_SELECTION)
+        }
+    }
 
     override fun getItemViewType(position: Int): Int {
         return when (getItem(position)) {
@@ -36,6 +55,19 @@ class PdfListAdapter(
         when (val row = getItem(position)) {
             is PdfListRow.DateHeader -> (holder as HeaderVH).bind(row)
             is PdfListRow.PdfEntry -> (holder as PdfVH).bind(row)
+        }
+    }
+
+    override fun onBindViewHolder(
+        holder: RecyclerView.ViewHolder,
+        position: Int,
+        payloads: MutableList<Any>
+    ) {
+        if (payloads.contains(PAYLOAD_SELECTION) && holder is PdfVH) {
+            val row = getItem(position) as? PdfListRow.PdfEntry ?: return
+            holder.bindSelection(row.item)
+        } else {
+            super.onBindViewHolder(holder, position, payloads)
         }
     }
 
@@ -64,12 +96,42 @@ class PdfListAdapter(
                 binding.tvCategoryBadge.text = row.category
             }
 
-            binding.root.setOnClickListener { onOpenPdf(item) }
+            bindSelection(item)
+
+            binding.root.setOnClickListener {
+                if (selectionMode) {
+                    onToggleSelect(item)
+                } else {
+                    onOpenPdf(item)
+                }
+            }
             binding.root.setOnLongClickListener {
-                onMoreClick(item)
+                if (!selectionMode) {
+                    onEnterSelection(item)
+                } else {
+                    onToggleSelect(item)
+                }
                 true
             }
             binding.btnMore.setOnClickListener { onMoreClick(item) }
+        }
+
+        fun bindSelection(item: PdfItem) {
+            if (selectionMode) {
+                binding.btnMore.visibility = View.GONE
+                binding.ivSelectCheck.visibility = View.VISIBLE
+                val checked = selectedKeys.contains(item.key)
+                if (checked) {
+                    binding.ivSelectCheck.setBackgroundResource(R.drawable.bg_check_circle_on)
+                    binding.ivSelectCheck.setImageResource(R.drawable.ic_check)
+                } else {
+                    binding.ivSelectCheck.setBackgroundResource(R.drawable.bg_check_circle_off)
+                    binding.ivSelectCheck.setImageDrawable(null)
+                }
+            } else {
+                binding.ivSelectCheck.visibility = View.GONE
+                binding.btnMore.visibility = View.VISIBLE
+            }
         }
     }
 
@@ -89,7 +151,8 @@ class PdfListAdapter(
     }
 
     companion object {
-        private const val TYPE_HEADER = 0
-        private const val TYPE_PDF = 1
+        const val TYPE_HEADER = 0
+        const val TYPE_PDF = 1
+        private const val PAYLOAD_SELECTION = "selection"
     }
 }

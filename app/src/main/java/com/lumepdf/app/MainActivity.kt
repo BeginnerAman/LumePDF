@@ -2,6 +2,7 @@ package com.lumepdf.app
 
 import android.Manifest
 import android.content.Intent
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -19,6 +20,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.lumepdf.app.data.PdfScanner
 import com.lumepdf.app.data.PdfStore
@@ -44,22 +46,28 @@ class MainActivity : AppCompatActivity() {
     private lateinit var pdfAdapter: PdfListAdapter
 
     private var allPdfs: List<PdfItem> = emptyList()
+    private var currentVisiblePdfs: List<PdfItem> = emptyList()
     private var selectedCategory: String = ALL_CATEGORY
     private var searchQuery: String = ""
     private var sortOrder: SortOrder = SortOrder.DATE_DESC
     private var dateGrouped: Boolean = true
 
-    private val pickPdfLauncher = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            runCatching {
-                contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
+    private var isMultiSelectMode: Boolean = false
+    private val selectedKeys = LinkedHashSet<String>()
+
+    private val pickPdfsLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris: List<Uri> ->
+        if (uris.isNotEmpty()) {
+            uris.forEach { uri ->
+                runCatching {
+                    contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                }
+                store.addImportedUri(uri.toString())
             }
-            store.addImportedUri(uri.toString())
             scanLibrary()
         }
     }
@@ -88,12 +96,24 @@ class MainActivity : AppCompatActivity() {
         sortOrder = store.getSortOrder()
         dateGrouped = store.isDateGrouped()
 
+        if (savedInstanceState != null) {
+            selectedCategory = savedInstanceState.getString(STATE_CATEGORY, ALL_CATEGORY)
+            searchQuery = savedInstanceState.getString(STATE_SEARCH, "")
+        }
+
         applyEdgeToEdgeInsets()
         setupRecyclerViews()
         setupControls()
         updatePermissionBanner()
         updateSortAndDatePills()
+        updateFloatingControls()
         scanLibrary()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(STATE_CATEGORY, selectedCategory)
+        outState.putString(STATE_SEARCH, searchQuery)
     }
 
     override fun onResume() {
@@ -104,7 +124,7 @@ class MainActivity : AppCompatActivity() {
     private fun applyEdgeToEdgeInsets() {
         ViewCompat.setOnApplyWindowInsetsListener(binding.rootContainer) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.updatePadding(top = bars.top, bottom = bars.bottom)
+            v.updatePadding(top = bars.top, bottom = bars.bottom, left = bars.left, right = bars.right)
             insets
         }
     }
@@ -115,6 +135,7 @@ class MainActivity : AppCompatActivity() {
                 when (chip) {
                     is CategoryChip.Filter -> {
                         selectedCategory = chip.name
+                        exitMultiSelect()
                         renderList()
                     }
 
@@ -122,6 +143,7 @@ class MainActivity : AppCompatActivity() {
                         GlassDialogs.showNewCategoryDialog(this) { newName ->
                             if (store.addCategory(newName)) {
                                 selectedCategory = newName
+                                exitMultiSelect()
                                 renderList()
                             } else {
                                 Toast.makeText(this, "Category already exists", Toast.LENGTH_SHORT)
@@ -157,22 +179,80 @@ class MainActivity : AppCompatActivity() {
 
         pdfAdapter = PdfListAdapter(
             onOpenPdf = { item -> openReader(item) },
-            onMoreClick = { item -> showPdfActions(item) }
+            onMoreClick = { item -> showPdfActions(item) },
+            onToggleSelect = { item -> toggleItemSelection(item) },
+            onEnterSelection = { item ->
+                isMultiSelectMode = true
+                selectedKeys.clear()
+                selectedKeys.add(item.key)
+                updateMultiSelectUi()
+            }
         )
 
+        val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         binding.rvPdfs.apply {
-            layoutManager = LinearLayoutManager(this@MainActivity)
+            layoutManager = if (isLandscape) {
+                GridLayoutManager(this@MainActivity, 2).apply {
+                    spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
+                        override fun getSpanSize(position: Int): Int {
+                            return if (pdfAdapter.getItemViewType(position) == PdfListAdapter.TYPE_HEADER) {
+                                2
+                            } else {
+                                1
+                            }
+                        }
+                    }
+                }
+            } else {
+                LinearLayoutManager(this@MainActivity)
+            }
             adapter = pdfAdapter
         }
     }
 
     private fun setupControls() {
         binding.btnRefresh.setOnClickListener { scanLibrary() }
-
         binding.btnGrantAccess.setOnClickListener { requestAutoScanPermission() }
 
-        binding.fabAddPdf.setOnClickListener {
-            pickPdfLauncher.launch(arrayOf("application/pdf"))
+        binding.fabAddPdf.setOnClickListener { handlePrimaryAddClick() }
+        binding.btnEmptyAction.setOnClickListener { handlePrimaryAddClick() }
+
+        binding.btnSelectMode.setOnClickListener {
+            if (isMultiSelectMode) {
+                exitMultiSelect()
+            } else {
+                isMultiSelectMode = true
+                selectedKeys.clear()
+                updateMultiSelectUi()
+            }
+        }
+
+        binding.btnMultiSelectAll.setOnClickListener {
+            val allSelected = currentVisiblePdfs.isNotEmpty() &&
+                currentVisiblePdfs.all { selectedKeys.contains(it.key) }
+            if (allSelected) {
+                selectedKeys.clear()
+            } else {
+                selectedKeys.clear()
+                currentVisiblePdfs.forEach { selectedKeys.add(it.key) }
+            }
+            updateMultiSelectUi()
+        }
+
+        binding.btnMultiMove.setOnClickListener {
+            if (selectedKeys.isEmpty()) {
+                Toast.makeText(this, "Select at least one PDF", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            showMoveMultipleCategory(selectedKeys.toList())
+        }
+
+        binding.btnMultiDelete.setOnClickListener {
+            if (selectedKeys.isEmpty()) {
+                Toast.makeText(this, "Select at least one PDF", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            confirmDeleteMultiple(selectedKeys.toList())
         }
 
         binding.btnSort.setOnClickListener {
@@ -191,6 +271,11 @@ class MainActivity : AppCompatActivity() {
             renderList()
         }
 
+        if (searchQuery.isNotEmpty()) {
+            binding.etSearch.setText(searchQuery)
+            binding.btnClearSearch.visibility = View.VISIBLE
+        }
+
         binding.etSearch.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
@@ -205,6 +290,88 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnClearSearch.setOnClickListener {
             binding.etSearch.setText("")
+        }
+    }
+
+    private fun isSpecificCategorySelected(): Boolean {
+        return selectedCategory != ALL_CATEGORY && selectedCategory != UNCATEGORIZED_CATEGORY
+    }
+
+    private fun handlePrimaryAddClick() {
+        if (isSpecificCategorySelected()) {
+            if (allPdfs.isEmpty()) {
+                Toast.makeText(this, "No PDFs in library yet. Import PDFs first.", Toast.LENGTH_SHORT)
+                    .show()
+                pickPdfsLauncher.launch(arrayOf("application/pdf"))
+                return
+            }
+            val targetCategory = selectedCategory
+            GlassDialogs.showAssignCategoryDialog(
+                context = this,
+                targetCategory = targetCategory,
+                allPdfs = allPdfs,
+                categoryMap = store.getCategoryMap()
+            ) { chosenKeys ->
+                val currentMap = store.getCategoryMap()
+                allPdfs.forEach { pdf ->
+                    val wasInTarget = currentMap[pdf.key].equals(targetCategory, ignoreCase = true)
+                    val isNowSelected = chosenKeys.contains(pdf.key)
+                    if (isNowSelected && !wasInTarget) {
+                        store.setPdfCategory(pdf.key, targetCategory)
+                    } else if (!isNowSelected && wasInTarget) {
+                        store.setPdfCategory(pdf.key, null)
+                    }
+                }
+                renderList()
+            }
+        } else {
+            pickPdfsLauncher.launch(arrayOf("application/pdf"))
+        }
+    }
+
+    private fun toggleItemSelection(item: PdfItem) {
+        if (selectedKeys.contains(item.key)) {
+            selectedKeys.remove(item.key)
+        } else {
+            selectedKeys.add(item.key)
+        }
+        updateMultiSelectUi()
+    }
+
+    private fun exitMultiSelect() {
+        if (!isMultiSelectMode && selectedKeys.isEmpty()) return
+        isMultiSelectMode = false
+        selectedKeys.clear()
+        updateMultiSelectUi()
+    }
+
+    private fun updateMultiSelectUi() {
+        pdfAdapter.updateSelectionState(isMultiSelectMode, selectedKeys.toSet())
+        updateFloatingControls()
+    }
+
+    private fun updateFloatingControls() {
+        if (isMultiSelectMode) {
+            binding.btnSelectMode.text = getString(R.string.done_label)
+            binding.btnSelectMode.setBackgroundResource(R.drawable.bg_category_tag)
+            binding.btnSelectMode.setTextColor(ContextCompat.getColor(this, R.color.accent_blue))
+            binding.fabAddPdf.visibility = View.GONE
+            binding.multiSelectBar.visibility = View.VISIBLE
+            binding.tvMultiCount.text = "${selectedKeys.size} selected"
+            val allSelected = currentVisiblePdfs.isNotEmpty() &&
+                currentVisiblePdfs.all { selectedKeys.contains(it.key) }
+            binding.btnMultiSelectAll.text = if (allSelected) "None" else "All"
+        } else {
+            binding.btnSelectMode.text = getString(R.string.select_label)
+            binding.btnSelectMode.setBackgroundResource(R.drawable.bg_glass_pill)
+            binding.btnSelectMode.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
+            binding.multiSelectBar.visibility = View.GONE
+            binding.fabAddPdf.visibility = View.VISIBLE
+            binding.tvFabLabel.text = if (isSpecificCategorySelected()) {
+                "Add to $selectedCategory"
+            } else {
+                getString(R.string.add_pdf)
+            }
         }
     }
 
@@ -269,7 +436,6 @@ class MainActivity : AppCompatActivity() {
         val categories = store.getCategories()
         val categoryMap = store.getCategoryMap()
 
-        // Build category counts
         val countsByCat = HashMap<String, Int>()
         var uncategorizedCount = 0
         allPdfs.forEach { pdf ->
@@ -303,7 +469,6 @@ class MainActivity : AppCompatActivity() {
         }
         categoryAdapter.submitList(chips)
 
-        // Filter by category and search
         val filtered = allPdfs.filter { item ->
             val itemCat = categoryMap[item.key]
             val matchesCat = when (selectedCategory) {
@@ -316,7 +481,6 @@ class MainActivity : AppCompatActivity() {
             matchesCat && matchesQuery
         }
 
-        // Sort
         val sorted = when (sortOrder) {
             SortOrder.DATE_DESC -> filtered.sortedByDescending { it.dateModifiedMillis }
             SortOrder.DATE_ASC -> filtered.sortedBy { it.dateModifiedMillis }
@@ -326,7 +490,8 @@ class MainActivity : AppCompatActivity() {
             SortOrder.SIZE_ASC -> filtered.sortedBy { it.sizeBytes }
         }
 
-        // Build rows (date-grouped or flat)
+        currentVisiblePdfs = sorted
+
         val rows: List<PdfListRow> = if (dateGrouped &&
             (sortOrder == SortOrder.DATE_DESC || sortOrder == SortOrder.DATE_ASC)
         ) {
@@ -351,7 +516,45 @@ class MainActivity : AppCompatActivity() {
 
         val totalSize = PdfFormatters.formatSize(sorted.sumOf { it.sizeBytes })
         binding.tvSubtitle.text = "${sorted.size} PDF${if (sorted.size == 1) "" else "s"} • $totalSize"
-        binding.emptyState.visibility = if (sorted.isEmpty()) View.VISIBLE else View.GONE
+
+        updateEmptyState(sorted.isEmpty())
+        updateFloatingControls()
+    }
+
+    private fun updateEmptyState(isEmpty: Boolean) {
+        if (!isEmpty) {
+            binding.emptyState.visibility = View.GONE
+            return
+        }
+        binding.emptyState.visibility = View.VISIBLE
+        when {
+            searchQuery.isNotEmpty() -> {
+                binding.tvEmptyTitle.text = "No Matching PDFs"
+                binding.tvEmptySubtitle.text = "No PDFs match “$searchQuery”."
+                binding.btnEmptyAction.visibility = View.GONE
+            }
+
+            isSpecificCategorySelected() -> {
+                binding.tvEmptyTitle.text = "No PDFs in $selectedCategory"
+                binding.tvEmptySubtitle.text =
+                    "Select PDFs from your library to organize them in $selectedCategory."
+                binding.btnEmptyAction.visibility = View.VISIBLE
+                binding.btnEmptyAction.text = "+ Add PDFs to $selectedCategory"
+            }
+
+            selectedCategory == UNCATEGORIZED_CATEGORY -> {
+                binding.tvEmptyTitle.text = "All Caught Up"
+                binding.tvEmptySubtitle.text = "Every PDF in your library is already categorized."
+                binding.btnEmptyAction.visibility = View.GONE
+            }
+
+            else -> {
+                binding.tvEmptyTitle.text = getString(R.string.empty_title)
+                binding.tvEmptySubtitle.text = getString(R.string.empty_subtitle)
+                binding.btnEmptyAction.visibility = View.VISIBLE
+                binding.btnEmptyAction.text = "+ Add PDF"
+            }
+        }
     }
 
     private fun openReader(item: PdfItem) {
@@ -390,6 +593,28 @@ class MainActivity : AppCompatActivity() {
                 GlassDialogs.showNewCategoryDialog(this) { newCat ->
                     store.addCategory(newCat)
                     store.setPdfCategory(item.key, newCat)
+                    renderList()
+                }
+            }
+        )
+    }
+
+    private fun showMoveMultipleCategory(keys: List<String>) {
+        GlassDialogs.showCategoryPickerDialog(
+            context = this,
+            title = "Move ${keys.size} PDFs to",
+            categories = store.getCategories(),
+            currentCategory = null,
+            onPickCategory = { chosen ->
+                keys.forEach { key -> store.setPdfCategory(key, chosen) }
+                exitMultiSelect()
+                renderList()
+            },
+            onCreateNewCategory = {
+                GlassDialogs.showNewCategoryDialog(this) { newCat ->
+                    store.addCategory(newCat)
+                    keys.forEach { key -> store.setPdfCategory(key, newCat) }
+                    exitMultiSelect()
                     renderList()
                 }
             }
@@ -439,8 +664,39 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun confirmDeleteMultiple(keys: List<String>) {
+        val itemsToDelete = allPdfs.filter { keys.contains(it.key) }
+        if (itemsToDelete.isEmpty()) return
+
+        GlassDialogs.showDeleteConfirmDialog(
+            context = this,
+            title = "Delete ${itemsToDelete.size} PDFs?",
+            body = "Selected PDFs will be permanently deleted (imported links will be removed from LumePDF)."
+        ) {
+            lifecycleScope.launch {
+                val deletedKeys = HashSet<String>()
+                itemsToDelete.forEach { item ->
+                    if (PdfScanner.deletePdf(this@MainActivity, item, store)) {
+                        deletedKeys.add(item.key)
+                    }
+                }
+                allPdfs = allPdfs.filterNot { deletedKeys.contains(it.key) }
+                exitMultiSelect()
+                renderList()
+                val msg = if (deletedKeys.size == itemsToDelete.size) {
+                    "Deleted ${deletedKeys.size} PDFs"
+                } else {
+                    "Deleted ${deletedKeys.size} of ${itemsToDelete.size} PDFs"
+                }
+                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     companion object {
         private const val ALL_CATEGORY = "All"
         private const val UNCATEGORIZED_CATEGORY = "Uncategorized"
+        private const val STATE_CATEGORY = "state_category"
+        private const val STATE_SEARCH = "state_search"
     }
 }

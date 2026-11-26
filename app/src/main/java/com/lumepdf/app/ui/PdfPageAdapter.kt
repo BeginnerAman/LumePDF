@@ -1,5 +1,6 @@
 package com.lumepdf.app.ui
 
+import android.graphics.Color
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.view.LayoutInflater
@@ -14,7 +15,7 @@ import kotlinx.coroutines.launch
 class PdfPageAdapter(
     private val renderer: PdfPageRenderer,
     private val scope: CoroutineScope,
-    private val pageWidthPx: Int
+    private var pageWidthPx: Int
 ) : RecyclerView.Adapter<PdfPageAdapter.PageVH>() {
 
     var nightMode: Boolean = false
@@ -24,6 +25,13 @@ class PdfPageAdapter(
                 notifyDataSetChanged()
             }
         }
+
+    fun updatePageWidth(newWidthPx: Int) {
+        if (newWidthPx > 0 && newWidthPx != pageWidthPx) {
+            pageWidthPx = newWidthPx
+            notifyDataSetChanged()
+        }
+    }
 
     private val invertFilter = ColorMatrixColorFilter(
         ColorMatrix(
@@ -79,8 +87,7 @@ class PdfPageAdapter(
             }
 
             binding.root.setBackgroundColor(
-                if (nightMode) android.graphics.Color.parseColor("#111622")
-                else android.graphics.Color.WHITE
+                if (nightMode) Color.parseColor("#111622") else Color.WHITE
             )
             binding.ivPage.colorFilter = if (nightMode) invertFilter else null
 
@@ -95,7 +102,7 @@ class PdfPageAdapter(
             binding.tvPagePlaceholder.visibility = View.VISIBLE
             binding.tvPagePlaceholder.text = "Page ${position + 1}"
 
-            val renderTargetWidth = (pageWidthPx * 1.25f).toInt()
+            val renderTargetWidth = (pageWidthPx * 1.25f).toInt().coerceAtLeast(1080)
             job = scope.launch {
                 val bmp = renderer.renderPage(position, renderTargetWidth)
                 if (bmp != null && bindingAdapterPosition == position) {

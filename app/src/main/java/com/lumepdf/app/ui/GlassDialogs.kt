@@ -3,6 +3,8 @@ package com.lumepdf.app.ui
 import android.app.Dialog
 import android.content.Context
 import android.graphics.Typeface
+import android.text.Editable
+import android.text.TextWatcher
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -11,23 +13,29 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.lumepdf.app.R
 import com.lumepdf.app.databinding.DialogGlassConfirmBinding
 import com.lumepdf.app.databinding.DialogGlassInputBinding
 import com.lumepdf.app.databinding.DialogGlassListBinding
+import com.lumepdf.app.databinding.DialogGlassMultiPickBinding
+import com.lumepdf.app.databinding.ItemPickPdfBinding
+import com.lumepdf.app.model.PdfFormatters
 import com.lumepdf.app.model.PdfItem
 import com.lumepdf.app.model.PdfSource
 import com.lumepdf.app.model.SortOrder
+import kotlin.math.min
 
 object GlassDialogs {
 
     private fun createGlassDialog(context: Context, view: View): Dialog {
+        val dm = context.resources.displayMetrics
+        val maxW = (500 * dm.density).toInt()
+        val width = min((dm.widthPixels * 0.92f).toInt(), maxW)
         return Dialog(context, R.style.Theme_LumePDF_GlassDialog).apply {
             setContentView(view)
-            window?.setLayout(
-                (context.resources.displayMetrics.widthPixels * 0.9f).toInt(),
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
+            window?.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT)
             window?.setGravity(Gravity.CENTER)
         }
     }
@@ -55,7 +63,7 @@ object GlassDialogs {
                 if (isSelected) R.drawable.bg_category_tag else R.drawable.bg_glass_pill
             )
             val padH = (16 * context.resources.displayMetrics.density).toInt()
-            val padV = (12 * context.resources.displayMetrics.density).toInt()
+            val padV = (11 * context.resources.displayMetrics.density).toInt()
             setPadding(padH, padV, padH, padV)
 
             val lp = LinearLayout.LayoutParams(
@@ -136,6 +144,7 @@ object GlassDialogs {
 
     fun showCategoryPickerDialog(
         context: Context,
+        title: String = "Move to Category",
         categories: List<String>,
         currentCategory: String?,
         onPickCategory: (String?) -> Unit,
@@ -143,7 +152,7 @@ object GlassDialogs {
     ) {
         val binding = DialogGlassListBinding.inflate(LayoutInflater.from(context))
         val dialog = createGlassDialog(context, binding.root)
-        binding.tvDialogTitle.text = "Move to Category"
+        binding.tvDialogTitle.text = title
 
         addOptionRow(
             context = context,
@@ -160,7 +169,7 @@ object GlassDialogs {
                 context = context,
                 container = binding.listContainer,
                 label = cat,
-                isSelected = cat.equals(currentCategory, ignoreCase = true)
+                isSelected = currentCategory != null && cat.equals(currentCategory, ignoreCase = true)
             ) {
                 dialog.dismiss()
                 onPickCategory(cat)
@@ -175,6 +184,151 @@ object GlassDialogs {
             dialog.dismiss()
             onCreateNewCategory()
         }
+        dialog.show()
+    }
+
+    fun showAssignCategoryDialog(
+        context: Context,
+        targetCategory: String,
+        allPdfs: List<PdfItem>,
+        categoryMap: Map<String, String>,
+        onApply: (Set<String>) -> Unit
+    ) {
+        val binding = DialogGlassMultiPickBinding.inflate(LayoutInflater.from(context))
+        val dialog = createGlassDialog(context, binding.root)
+
+        val dm = context.resources.displayMetrics
+        val listHeight = min((290 * dm.density).toInt(), (dm.heightPixels * 0.38f).toInt())
+        binding.rvPickPdfs.layoutParams = binding.rvPickPdfs.layoutParams.apply {
+            height = listHeight
+        }
+
+        val selected = HashSet<String>()
+        allPdfs.forEach { pdf ->
+            if (categoryMap[pdf.key].equals(targetCategory, ignoreCase = true)) {
+                selected.add(pdf.key)
+            }
+        }
+
+        var filtered = allPdfs.sortedByDescending { it.dateModifiedMillis }
+
+        binding.tvPickTitle.text = "Add to $targetCategory"
+
+        fun updateLabels() {
+            binding.tvPickSubtitle.text = "${selected.size} selected of ${allPdfs.size} PDFs"
+            val allVisibleSelected =
+                filtered.isNotEmpty() && filtered.all { selected.contains(it.key) }
+            binding.btnPickSelectAll.text = if (allVisibleSelected) "Clear" else "Select All"
+            binding.btnPickConfirm.text = if (selected.isEmpty()) "Save" else "Save (${selected.size})"
+        }
+
+        val pickAdapter = object : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+            override fun getItemCount(): Int = filtered.size
+
+            override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+                val itemBinding = ItemPickPdfBinding.inflate(
+                    LayoutInflater.from(parent.context),
+                    parent,
+                    false
+                )
+                return object : RecyclerView.ViewHolder(itemBinding.root) {
+                    fun bind(pdf: PdfItem) {
+                        itemBinding.tvPickName.text = pdf.displayName
+                        val existingCat = categoryMap[pdf.key]
+                        val catLabel = existingCat ?: "Uncategorized"
+                        val sizeStr = PdfFormatters.formatSize(pdf.sizeBytes)
+                        itemBinding.tvPickMeta.text = "$catLabel • $sizeStr"
+
+                        val checked = selected.contains(pdf.key)
+                        if (checked) {
+                            itemBinding.ivPickCheck.setBackgroundResource(R.drawable.bg_check_circle_on)
+                            itemBinding.ivPickCheck.setImageResource(R.drawable.ic_check)
+                        } else {
+                            itemBinding.ivPickCheck.setBackgroundResource(R.drawable.bg_check_circle_off)
+                            itemBinding.ivPickCheck.setImageDrawable(null)
+                        }
+
+                        itemBinding.root.setOnClickListener {
+                            if (selected.contains(pdf.key)) {
+                                selected.remove(pdf.key)
+                            } else {
+                                selected.add(pdf.key)
+                            }
+                            val pos = bindingAdapterPosition
+                            if (pos != RecyclerView.NO_POSITION) notifyItemChanged(pos)
+                            updateLabels()
+                        }
+                    }
+                }
+            }
+
+            override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+                val pdf = filtered[position]
+                val itemBinding = ItemPickPdfBinding.bind(holder.itemView)
+                itemBinding.tvPickName.text = pdf.displayName
+                val existingCat = categoryMap[pdf.key]
+                val catLabel = existingCat ?: "Uncategorized"
+                val sizeStr = PdfFormatters.formatSize(pdf.sizeBytes)
+                itemBinding.tvPickMeta.text = "$catLabel • $sizeStr"
+
+                val checked = selected.contains(pdf.key)
+                if (checked) {
+                    itemBinding.ivPickCheck.setBackgroundResource(R.drawable.bg_check_circle_on)
+                    itemBinding.ivPickCheck.setImageResource(R.drawable.ic_check)
+                } else {
+                    itemBinding.ivPickCheck.setBackgroundResource(R.drawable.bg_check_circle_off)
+                    itemBinding.ivPickCheck.setImageDrawable(null)
+                }
+
+                itemBinding.root.setOnClickListener {
+                    if (selected.contains(pdf.key)) {
+                        selected.remove(pdf.key)
+                    } else {
+                        selected.add(pdf.key)
+                    }
+                    val pos = holder.bindingAdapterPosition
+                    if (pos != RecyclerView.NO_POSITION) notifyItemChanged(pos)
+                    updateLabels()
+                }
+            }
+        }
+
+        binding.rvPickPdfs.layoutManager = LinearLayoutManager(context)
+        binding.rvPickPdfs.adapter = pickAdapter
+
+        binding.etPickSearch.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                val q = s?.toString()?.trim().orEmpty()
+                filtered = allPdfs
+                    .filter { q.isEmpty() || it.name.contains(q, ignoreCase = true) }
+                    .sortedByDescending { it.dateModifiedMillis }
+                pickAdapter.notifyDataSetChanged()
+                updateLabels()
+            }
+
+            override fun afterTextChanged(s: Editable?) = Unit
+        })
+
+        binding.btnPickSelectAll.setOnClickListener {
+            val allVisibleSelected =
+                filtered.isNotEmpty() && filtered.all { selected.contains(it.key) }
+            if (allVisibleSelected) {
+                filtered.forEach { selected.remove(it.key) }
+            } else {
+                filtered.forEach { selected.add(it.key) }
+            }
+            pickAdapter.notifyDataSetChanged()
+            updateLabels()
+        }
+
+        binding.btnPickCancel.setOnClickListener { dialog.dismiss() }
+        binding.btnPickConfirm.setOnClickListener {
+            dialog.dismiss()
+            onApply(selected)
+        }
+
+        updateLabels()
         dialog.show()
     }
 

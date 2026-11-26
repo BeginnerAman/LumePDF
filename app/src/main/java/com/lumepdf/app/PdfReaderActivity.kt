@@ -1,5 +1,6 @@
 package com.lumepdf.app
 
+import android.content.res.Configuration
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
@@ -48,7 +49,7 @@ class PdfReaderActivity : AppCompatActivity() {
 
         ViewCompat.setOnApplyWindowInsetsListener(binding.readerRoot) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.updatePadding(top = bars.top, bottom = bars.bottom)
+            v.updatePadding(top = bars.top, bottom = bars.bottom, left = bars.left, right = bars.right)
             insets
         }
 
@@ -78,6 +79,24 @@ class PdfReaderActivity : AppCompatActivity() {
         openDocument(uri, filePath)
     }
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        binding.rvPages.post {
+            val newWidth = calculatePageWidthPx()
+            pageAdapter?.updatePageWidth(newWidth)
+            if (::layoutManager.isInitialized && totalPages > 0) {
+                layoutManager.scrollToPositionWithOffset(currentPage.coerceIn(0, totalPages - 1), 0)
+            }
+        }
+    }
+
+    private fun calculatePageWidthPx(): Int {
+        val rvWidth = binding.rvPages.width
+        val baseWidth = if (rvWidth > 0) rvWidth else resources.displayMetrics.widthPixels
+        val marginPx = (20 * resources.displayMetrics.density).toInt()
+        return (baseWidth - marginPx).coerceAtLeast(480)
+    }
+
     private fun openDocument(uri: Uri, filePath: String?) {
         lifecycleScope.launch {
             val result = PdfPageRenderer.open(this@PdfReaderActivity, uri, filePath)
@@ -93,8 +112,7 @@ class PdfReaderActivity : AppCompatActivity() {
                     return@onSuccess
                 }
 
-                val widthPx = (resources.displayMetrics.widthPixels -
-                    (20 * resources.displayMetrics.density).toInt()).coerceAtLeast(480)
+                val widthPx = calculatePageWidthPx()
 
                 layoutManager = LinearLayoutManager(this@PdfReaderActivity)
                 pageAdapter = PdfPageAdapter(pdfRenderer, lifecycleScope, widthPx).apply {
